@@ -41,6 +41,7 @@ SAMPLE_INTERVAL = 15          # seconds between readings
 PUSH_INTERVAL = 600           # seconds between GitHub pushes (10 min)
 IDLE_THRESHOLD = 120          # seconds of no input → stop counting
 MAX_CREDIT = SAMPLE_INTERVAL * 3  # cap one interval's credit (covers sleep/wake)
+DEBUG = bool(os.environ.get("TT_DEBUG"))  # log every sample to data/samples.log
 
 # Frontmost-app name → friendly browser label. These apps expose an
 # active-tab URL via AppleScript; everything else is ignored.
@@ -210,11 +211,12 @@ def run() -> None:
     domains = load_day(date)
     last_sample = time.time()
     last_push = 0.0
+    prev_key = None  # (app, domain) of the previous sample — for debounce
 
     while True:
         time.sleep(SAMPLE_INTERVAL)
         now = time.time()
-        elapsed = min(now - last_sample, MAX_CREDIT)
+        gap = now - last_sample
         last_sample = now
 
         # Rollover at midnight: flush yesterday, start a fresh day.
@@ -224,14 +226,39 @@ def run() -> None:
             push_to_github(date)
             date, domains = cur, load_day(cur)
 
-        if idle_seconds() <= IDLE_THRESHOLD:
-            app = frontmost_app()
-            label = BROWSER_APPS.get(app) if app else None
-            if label:
-                d = domain_of(active_tab_url(app))
-                if d:
-                    domains[d] = round(domains.get(d, 0) + elapsed, 1)
-                    save_day(date, domains)
+        idle = idle_seconds()
+        app = frontmost_app()
+        label = BROWSER_APPS.get(app) if app else None
+        url = active_tab_url(app) if label else None
+        d = domain_of(url)
+        cur_key = (app, d) if d else None
+
+        # Guard 1 — sleep/wake gap: if far more than one interval elapsed, the
+        # machine was asleep or suspended. We have no idea what was actually in
+        # front during that gap, so credit nothing and just re-establish state.
+        slept = gap > SAMPLE_INTERVAL * 1.6
+
+        # Guard 2 — debounce: only credit a tab that was *also* frontmost on the
+        # previous sample. A page that steals focus for a single tick (or a
+        # momentary app flicker) never matches its neighbours, so it earns zero.
+        stable = cur_key is not None and cur_key == prev_key
+        elapsed = min(gap, MAX_CREDIT)
+        credited = False
+        if d and stable and not slept and idle <= IDLE_THRESHOLD:
+            domains[d] = round(domains.get(d, 0) + elapsed, 1)
+            save_day(date, domains)
+            credited = True
+
+        prev_key = cur_key
+
+        if DEBUG:
+            why = "+%.0fs→%s" % (elapsed, d) if credited else (
+                "slept" if slept else
+                "idle" if idle > IDLE_THRESHOLD else
+                "debounce" if d and not stable else "-")
+            with open(os.path.join(DATA_DIR, "samples.log"), "a") as fh:
+                fh.write(f"{datetime.now():%H:%M:%S} gap={gap:5.0f} idle={idle:5.0f} "
+                         f"app={app!r:24} url={(url or '')[:55]!r} {why}\n")
 
         if now - last_push >= PUSH_INTERVAL:
             ok = push_to_github(date)
