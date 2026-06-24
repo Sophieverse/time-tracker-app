@@ -58,10 +58,24 @@ Supported browsers: Safari, Chrome, Arc, Brave, Edge, Dia.
 
 Times are in seconds, sorted descending.
 
+## Local dashboard
+
+A small dark-themed dashboard at **http://localhost:7799** shows time-per-domain
+with a day picker and live bars. It reads `data/*.json` straight off disk, so it
+mirrors the tracker within seconds (faster than the 10-min GitHub push).
+
+```bash
+python3 dashboard.py        # serve on :7799 and open the browser
+python3 dashboard.py 8080   # custom port
+```
+
+Or double-click **dashboard.command** in Finder. It refreshes every 15s.
+
 ## Commands
 
 ```bash
-tail -f data/tracker.log                  # watch it work
+tail -f data/tracker.log                  # watch the agent work
+python3 dashboard.py                      # open the dashboard
 ./uninstall.sh                            # stop & remove the agent
 launchctl list | grep timetracker         # confirm it's running
 ```
