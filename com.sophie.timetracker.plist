@@ -8,6 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
+        <string>-u</string>
         <string>__TRACKER_PATH__</string>
     </array>
 
