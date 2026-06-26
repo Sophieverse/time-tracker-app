@@ -81,6 +81,14 @@ def day_summary(conn, date_str: str) -> dict:
 
     timeline = _build_timeline(rows, catmap)
 
+    # Enrich timeline blocks with AI session labels (matched by stable start_ts).
+    sess = {int(s["start_ts"]): s for s in db.sessions_for_range(conn, start, end)}
+    for b in timeline:
+        s = sess.get(b["start"])
+        if s and s["ai_title"]:
+            b["ai_title"] = s["ai_title"]
+            b["ai_summary"] = s["ai_summary"]
+
     def cat_rows():
         out = []
         for name, secs in sorted(by_cat.items(), key=lambda kv: -kv[1]):
@@ -113,6 +121,7 @@ def day_summary(conn, date_str: str) -> dict:
         "by_domain": dom_rows(),
         "by_app": app_rows(),
         "timeline": timeline,
+        "annotations": annotations_list(conn, date_str),
     }
 
 
@@ -157,6 +166,41 @@ def _build_timeline(rows, catmap) -> list[dict]:
         b["seconds"] = round(secs)
         out.append(b)
     return out
+
+
+def sessions_list(conn, date_str: str) -> dict:
+    """AI-labeled activity sessions for a day, most-recent first (the feed)."""
+    import json as _json
+    start, end = _day_bounds(date_str)
+    out = []
+    for s in db.sessions_for_range(conn, start, end):
+        try:
+            tasks = _json.loads(s["ai_tasks"]) if s["ai_tasks"] else []
+        except Exception:
+            tasks = []
+        out.append({
+            "start": round(s["start_ts"]), "end": round(s["end_ts"]),
+            "seconds": round(s["seconds"]), "app": s["app"], "domain": s["domain"],
+            "category": s["category"], "color": taxonomy.color_of(s["category"] or ""),
+            "ai_title": s["ai_title"], "ai_summary": s["ai_summary"], "ai_tasks": tasks,
+        })
+    out.reverse()  # most recent first
+    return {"sessions": out}
+
+
+def annotations_list(conn, date_str: str) -> list:
+    start, end = _day_bounds(date_str)
+    return [{"start": round(a["start_ts"]), "end": round(a["end_ts"]), "note": a["note"]}
+            for a in db.annotations_for_range(conn, start, end)]
+
+
+def focus_sessions_list(conn, date_str: str) -> dict:
+    start, end = _day_bounds(date_str)
+    out = [{"start": round(f["start_ts"]), "end": round(f["end_ts"]),
+            "planned_minutes": f["planned_minutes"], "completed": bool(f["completed"]),
+            "label": f["label"]}
+           for f in db.focus_sessions_for_range(conn, start, end)]
+    return {"sessions": out}
 
 
 def range_summary(conn, days: int = 7) -> dict:

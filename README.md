@@ -39,14 +39,37 @@ server.py  ──serves──▶  dashboard.html  (http://localhost:7799)
 
 | File | Role |
 |------|------|
-| `tracker.py` | Always-on sampler → writes granular `events` rows |
+| `tracker.py` | Always-on sampler → writes granular `events` rows; runs idle prompt + distraction alerts; background maintenance thread |
 | `db.py` | SQLite schema + helpers (WAL, so read/write don't block) |
 | `taxonomy.py` | Category list, colors, productivity flags, heuristic maps |
 | `categorize.py` | Labels domains/apps: built-in heuristics, then Claude for the rest |
-| `analytics.py` | Day summary, sessionized timeline, weekly trends |
-| `server.py` | JSON API + serves the dashboard |
+| `sessions.py` | Sessionizes blocks and AI-labels them from page titles ("Shopping for floor lamps") |
+| `goals.py` | Daily focus goal + category limits; progress, streaks, 7-day strip |
+| `analytics.py` | Day summary, sessionized timeline (with AI labels), weekly trends |
+| `server.py` | JSON API (+ POST for goals/focus sessions) + serves the dashboard |
 | `dashboard.html` | Single-page Rize-style UI (self-contained, no external requests) |
+| `build_app.sh` | Builds the Dock-able "Time Tracker.app" launcher |
 | `migrate_json.py` | One-off import of the old daily-totals JSON logs |
+
+### Smart features
+
+- **AI activity sessions** — contiguous blocks are labeled by Claude from the
+  page/window titles you saw, so the day reads like a story ("Shopping for floor
+  lamps · 20m"), not just a list of domains. Cached; needs an Anthropic key.
+- **Goals & streaks** — set a daily focus-minute goal and per-category time
+  limits; the dashboard shows progress rings, a streak, and a 7-day strip.
+- **Focus timer** — a Pomodoro timer in the dashboard; completed sessions are
+  logged.
+- **Idle prompt** — after you return from being away >5 min, a native dialog
+  asks what you were doing and stores it as an annotation. Toggle in config.json.
+- **Distraction alerts** — a native notification after 30 min of continuous
+  Social Media / Entertainment in one stretch. Toggle in config.json.
+
+### Dock app
+
+Run `./build_app.sh` to (re)build **/Applications/Time Tracker.app** — a launcher
+with a custom icon that opens the dashboard in a clean window. Drag it onto your
+Dock to pin it.
 
 ### Accuracy guards (learned the hard way)
 

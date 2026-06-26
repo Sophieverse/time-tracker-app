@@ -45,6 +45,19 @@ BROWSER_APPS = {
     "Brave Browser": "Brave", "Microsoft Edge": "Edge", "Dia": "Dia",
 }
 
+# Categories that trigger distraction alerts.
+DISTRACTING = {"Social Media", "Entertainment"}
+
+# Feature flags (overridable in config.json). All default on.
+_CFG_CACHE = None
+
+
+def cfg(key, default):
+    global _CFG_CACHE
+    if _CFG_CACHE is None:
+        _CFG_CACHE = _load_config()
+    return _CFG_CACHE.get(key, default)
+
 
 # ── macOS introspection ─────────────────────────────────────────────────────
 
@@ -159,16 +172,94 @@ def push_to_github(conn, date_str: str) -> bool:
         return False
 
 
+# ── Native prompts / notifications ───────────────────────────────────────────
+
+def _notify(title: str, text: str) -> None:
+    """Fire-and-forget macOS notification."""
+    safe = text.replace('"', "'")
+    st = title.replace('"', "'")
+    subprocess.Popen(["osascript", "-e",
+                      f'display notification "{safe}" with title "{st}"'])
+
+
+def _idle_prompt_async(gap_start: float, gap_end: float) -> None:
+    """Ask, in a side thread, what the user was doing during an idle gap and
+    store the answer as an annotation. Runs detached so it never blocks sampling."""
+    import threading
+
+    def worker():
+        mins = round((gap_end - gap_start) / 60)
+        prompt = (f"You were away for ~{mins} min. What were you working on?\\n"
+                  f"(Leave blank to skip.)")
+        script = (f'display dialog "{prompt}" default answer "" '
+                  f'with title "Time Tracker" buttons {{"Skip","Save"}} '
+                  f'default button "Save" with icon note giving up after 120')
+        out = subprocess.run(["osascript", "-e", script],
+                             capture_output=True, text=True)
+        text = out.stdout.strip()
+        if "button returned:Save" in text and "text returned:" in text:
+            note = text.split("text returned:", 1)[1].strip()
+            if note:
+                c = db.connect()
+                try:
+                    db.add_annotation(c, gap_start, gap_end, note[:500])
+                finally:
+                    c.close()
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _maintenance_loop() -> None:
+    """Background worker: categorize new keys, label sessions with Claude, and
+    push the daily summary to GitHub — every CATEGORIZE_INTERVAL. Kept off the
+    sampling thread so a slow network/Claude call never disturbs timing."""
+    import threading
+
+    def worker():
+        conn = db.connect()
+        while True:
+            time.sleep(CATEGORIZE_INTERVAL)
+            try:
+                import categorize
+                categorize.run()
+            except Exception as e:
+                print(f"[categorize] {e}")
+            try:
+                import sessions
+                rep = sessions.run(conn)
+                if rep.get("labeled"):
+                    print(f"[sessions] labeled {rep['labeled']}")
+            except Exception as e:
+                print(f"[sessions] {e}")
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            for _ in range(3):
+                if push_to_github(conn, date_str):
+                    db.set_meta(conn, "last_sync", str(time.time()))
+                    break
+                time.sleep(3)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
 # ── Main loop ────────────────────────────────────────────────────────────────
 
 def run() -> None:
     print(f"[time-tracker] started · sample {SAMPLE_INTERVAL}s · "
           f"push {PUSH_INTERVAL}s · idle>{IDLE_THRESHOLD}s pauses")
     conn = db.connect()
+    _maintenance_loop()  # categorize + label + sync, off-thread
+
+    idle_prompt_on = cfg("idle_prompt", True)
+    idle_prompt_min = float(cfg("idle_prompt_min_minutes", 5)) * 60
+    distraction_on = cfg("distraction_alerts", True)
+    distraction_limit = float(cfg("distraction_threshold_minutes", 30)) * 60
+
     last_sample = time.time()
-    last_push = 0.0
-    last_cat = 0.0
     prev_key = None
+    prev_idle = 0.0
+    idle_started_at = None          # wall-clock when the current idle stretch began
+    distract_secs = 0.0             # consecutive seconds on distracting categories
+    distract_alerted = False
 
     while True:
         time.sleep(SAMPLE_INTERVAL)
@@ -188,50 +279,48 @@ def run() -> None:
         slept = gap > SAMPLE_INTERVAL * 1.6
         stable = cur_key is not None and cur_key == prev_key
         elapsed = min(gap, MAX_CREDIT)
+        is_idle = idle > IDLE_THRESHOLD
 
         credited = False
-        if app and stable and not slept and idle <= IDLE_THRESHOLD:
-            # Credit the interval. Browser → store domain/url/title; native app
-            # → just the app (the activity key is the app name itself).
+        if app and stable and not slept and not is_idle:
             db.add_event(conn, ts=now - elapsed, dur=elapsed, app=app,
                          is_browser=is_browser, domain=domain, url=url, title=title)
             credited = True
 
+        # ── Idle prompt: detect the transition from idle → active. ──
+        if is_idle and idle_started_at is None and not slept:
+            idle_started_at = now - idle      # idle began this long ago
+        if idle_prompt_on and idle_started_at is not None and idle < 5 and not slept:
+            gap_len = now - idle_started_at
+            if gap_len >= idle_prompt_min:
+                _idle_prompt_async(idle_started_at, now)
+            idle_started_at = None
+
+        # ── Distraction alert: consecutive time in a distracting category. ──
+        if credited:
+            key = domain if (is_browser and domain) else app
+            cat = db.get_category(conn, key) if key else None
+            if cat in DISTRACTING:
+                distract_secs += elapsed
+                if distraction_on and not distract_alerted and distract_secs >= distraction_limit:
+                    _notify("Time Tracker",
+                            f"{round(distract_secs/60)} min on {cat} this stretch.")
+                    distract_alerted = True
+            else:
+                distract_secs = 0.0
+                distract_alerted = False
+
         prev_key = cur_key
+        prev_idle = idle
 
         if DEBUG:
             why = (f"+{elapsed:.0f}s→{domain or app}" if credited else
                    "slept" if slept else
-                   "idle" if idle > IDLE_THRESHOLD else
+                   "idle" if is_idle else
                    "debounce" if app and not stable else "-")
             with open(os.path.join(db.DATA_DIR, "samples.log"), "a") as fh:
                 fh.write(f"{datetime.now():%H:%M:%S} gap={gap:5.0f} idle={idle:5.0f} "
                          f"app={app!r:22} dom={(domain or '')!r:22} {why}\n")
-
-        if now - last_cat >= CATEGORIZE_INTERVAL:
-            last_cat = now
-            try:
-                import categorize
-                categorize.run()
-            except Exception as e:
-                print(f"[categorize] {e}")
-
-        if now - last_push >= PUSH_INTERVAL:
-            last_push = now
-            date_str = datetime.now().strftime("%Y-%m-%d")
-            # Retry a few times: LaunchAgents occasionally can't resolve DNS for
-            # a moment (resolver not yet attached to the process session).
-            ok = False
-            for attempt in range(3):
-                if push_to_github(conn, date_str):
-                    ok = True
-                    break
-                time.sleep(3)
-            if ok:
-                db.set_meta(conn, "last_sync", str(now))
-                print(f"[time-tracker] synced {date_str} at {datetime.now():%H:%M}")
-            else:
-                print(f"[time-tracker] sync failed (will retry in {PUSH_INTERVAL}s)")
 
 
 if __name__ == "__main__":

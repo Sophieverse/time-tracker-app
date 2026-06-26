@@ -232,6 +232,8 @@
   /* ---------- 2-col grid below timeline ---------- */
   .grid-2 { display: grid; grid-template-columns: 1.05fr 1.55fr; gap: var(--gap); margin-bottom: var(--gap); }
   .grid-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); margin-bottom: var(--gap); }
+  /* Goals (content-heavy) wider than the compact timer widget */
+  .grid-goals { display: grid; grid-template-columns: 1.55fr 1fr; gap: var(--gap); margin-bottom: var(--gap); }
 
   /* ---------- Donut ---------- */
   .donut-card .card-body { display: flex; flex-direction: column; }
@@ -306,6 +308,248 @@
     color: var(--text-dim); margin: 0 0 12px 2px;
   }
 
+  /* ---------- Activity Sessions feed ---------- */
+  .sessions-card .card-body { padding-top: 8px; }
+  .sfeed { display: flex; flex-direction: column; }
+  .srow {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: 14px;
+    padding: 15px 4px 16px;
+    border-top: 1px solid var(--line-soft);
+    position: relative;
+  }
+  .srow:first-child { border-top: none; }
+  /* timeline rail: dot + connecting line */
+  .srow .rail { position: relative; display: flex; justify-content: center; padding-top: 5px; }
+  .srow .rail .sdot {
+    width: 11px; height: 11px; border-radius: 50%; flex: none; z-index: 2;
+    box-shadow: 0 0 0 3px var(--surface);
+  }
+  .srow .rail::before {
+    content: ""; position: absolute; top: 5px; left: 50%; transform: translateX(-50%);
+    width: 2px; bottom: -16px; background: var(--line-soft);
+  }
+  .srow:last-child .rail::before { display: none; }
+
+  .scol { min-width: 0; }
+  .stitle {
+    font-size: 14.5px; font-weight: 650; color: var(--text);
+    letter-spacing: -0.01em; line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .stitle.fallback { color: var(--text-faint); font-weight: 600; }
+  .stitle .labeling {
+    margin-left: 8px; font-size: 11px; font-weight: 600; vertical-align: 1px;
+    color: var(--accent-2); letter-spacing: 0.02em;
+    text-transform: none;
+  }
+  .smeta {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
+    font-size: 12.5px; color: var(--text-dim); margin-top: 4px;
+  }
+  .smeta .dur { color: var(--text-faint); font-weight: 620; }
+  .smeta .src {
+    color: var(--text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px;
+  }
+  .smeta .sep { color: var(--line); }
+  .smeta .scat {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.5px; font-weight: 600; color: var(--text-faint);
+  }
+  .ssummary {
+    font-size: 13px; color: var(--text-faint); line-height: 1.5; margin-top: 7px;
+    overflow-wrap: anywhere;
+  }
+  .schips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+  .schip {
+    font-size: 11.5px; color: var(--text-faint);
+    background: var(--surface-2); border: 1px solid var(--line-soft);
+    border-radius: 7px; padding: 3px 9px 3px 8px; line-height: 1.3;
+    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  }
+  .schip .tick { color: var(--accent-2); flex: none; }
+  .schip .tx { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sfeed-more {
+    margin-top: 14px; text-align: center;
+  }
+  .moreBtn {
+    appearance: none; cursor: pointer;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 9px; padding: 8px 16px;
+    font-size: 13px; font-weight: 600; font-family: var(--sans);
+    transition: background .14s, border-color .14s;
+  }
+  .moreBtn:hover { background: var(--surface-3); border-color: var(--accent-2); }
+
+  /* ---------- Goals ---------- */
+  .goals-card .card-body { display: flex; flex-direction: column; gap: 18px; }
+  .goal-top { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .goal-ring { position: relative; flex: none; width: 96px; height: 96px; }
+  .goal-ring .ctr {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; line-height: 1;
+  }
+  .goal-ring .ctr .pc { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .goal-ring .ctr .pc.over { color: var(--good); }
+  .goal-ring .ctr .lb { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-top: 3px; }
+  .goal-top .ginfo { flex: 1 1 160px; min-width: 150px; }
+  .goal-top .ginfo .gbig { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+  .goal-top .ginfo .gbig b { color: var(--accent); }
+  .goal-top .ginfo .gsub { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; }
+  .streak {
+    display: inline-flex; align-items: center; gap: 7px; margin-top: 11px;
+    background: rgba(255,179,71,0.10); border: 1px solid rgba(255,179,71,0.28);
+    color: var(--accent); border-radius: 9px; padding: 5px 11px;
+    font-size: 12.5px; font-weight: 650;
+  }
+  .streak.zero { background: var(--surface-2); border-color: var(--line-soft); color: var(--text-dim); }
+
+  .gweek { display: flex; flex-direction: column; gap: 8px; }
+  .gweek-row { display: flex; align-items: center; gap: 9px; }
+  .gweek-dots { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; flex: 1; }
+  .gwd { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .gwd .pip {
+    width: 100%; height: 26px; border-radius: 6px; background: var(--surface-2);
+    border: 1px solid var(--line-soft); position: relative; overflow: hidden;
+  }
+  .gwd .pip .pfill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent-2); }
+  .gwd.met .pip { border-color: rgba(255,179,71,0.4); }
+  .gwd.met .pip .pfill { background: var(--accent); }
+  .gwd .gd { font-size: 10.5px; color: var(--text-dim); font-weight: 600; }
+  .gwd.today .gd { color: var(--accent); }
+
+  .glimits { display: flex; flex-direction: column; gap: 12px; }
+  .glimit .glhead {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-size: 13px; margin-bottom: 6px;
+  }
+  .glimit .glhead .glname { font-weight: 580; display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+  .glimit .glhead .glname .sw { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .glimit .glhead .glname .tx { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .glimit .glhead .glval { color: var(--text-faint); white-space: nowrap; font-weight: 580; }
+  .glimit .glhead .glval.over { color: #ff6b6b; font-weight: 680; }
+  .glimit .gltrack { height: 8px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+  .glimit .glfill { height: 100%; border-radius: 5px; background: var(--accent-2); transition: width .5s cubic-bezier(.2,.7,.2,1); }
+  .glimit .glfill.warn { background: var(--accent); }
+  .glimit .glfill.over { background: #ff6b6b; }
+
+  .goals-empty-limits { font-size: 12.5px; color: var(--text-dim); }
+
+  /* ---------- Goals editor (inline panel) ---------- */
+  .iconbtn {
+    appearance: none; cursor: pointer;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--text-faint); border-radius: 8px; height: 28px; padding: 0 11px;
+    font-size: 12px; font-weight: 600; font-family: var(--sans);
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background .14s, border-color .14s, color .14s;
+  }
+  .iconbtn:hover { background: var(--surface-3); border-color: var(--accent-2); color: var(--text); }
+  .gedit {
+    display: none; flex-direction: column; gap: 16px;
+    border-top: 1px solid var(--line-soft); padding-top: 16px;
+  }
+  .gedit.on { display: flex; }
+  .field-lbl {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-dim); font-weight: 650; margin-bottom: 8px;
+  }
+  .inp, .sel {
+    appearance: none; font-family: var(--sans); font-size: 13.5px;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 8px 11px; line-height: 1.2;
+  }
+  .inp:focus, .sel:focus { border-color: var(--accent-2); outline: none; }
+  .inp.num-in { width: 92px; }
+  .sel { padding-right: 28px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%), linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 16px, calc(100% - 9px) 16px;
+    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  }
+  .focus-goal-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .focus-goal-row .unit { font-size: 13px; color: var(--text-dim); }
+  .editlimit-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .editlimit-row .sel { flex: 1 1 150px; min-width: 130px; }
+  .rmbtn {
+    appearance: none; cursor: pointer; flex: none;
+    width: 30px; height: 34px; border-radius: 8px;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text-dim);
+    font-size: 16px; line-height: 1; transition: background .14s, color .14s, border-color .14s;
+  }
+  .rmbtn:hover { background: rgba(255,107,107,0.12); border-color: rgba(255,107,107,0.4); color: #ff6b6b; }
+  .gedit-limits { display: flex; flex-direction: column; gap: 9px; }
+  .addlimit {
+    appearance: none; cursor: pointer; align-self: flex-start;
+    background: transparent; border: 1px dashed var(--line); color: var(--text-faint);
+    border-radius: 8px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; font-family: var(--sans);
+    transition: border-color .14s, color .14s;
+  }
+  .addlimit:hover { border-color: var(--accent-2); color: var(--text); }
+  .gedit-actions { display: flex; gap: 10px; }
+  .btn-primary {
+    appearance: none; cursor: pointer; font-family: var(--sans);
+    background: var(--accent); border: 1px solid var(--accent); color: #1a1206;
+    border-radius: 9px; padding: 9px 18px; font-size: 13px; font-weight: 700;
+    transition: filter .14s;
+  }
+  .btn-primary:hover { filter: brightness(1.07); }
+  .btn-primary:disabled { opacity: 0.55; cursor: default; }
+  .btn-ghost {
+    appearance: none; cursor: pointer; font-family: var(--sans);
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 9px; padding: 9px 18px; font-size: 13px; font-weight: 600;
+    transition: background .14s, border-color .14s;
+  }
+  .btn-ghost:hover { background: var(--surface-3); border-color: var(--accent-2); }
+
+  /* ---------- Focus Timer (Pomodoro) ---------- */
+  .timer-card .card-body { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .timer-dial { position: relative; width: 184px; height: 184px; flex: none; }
+  .timer-dial svg { display: block; transform: rotate(-90deg); }
+  .timer-dial .tring-bg { stroke: var(--surface-3); }
+  .timer-dial .tring-fg { stroke: var(--accent); transition: stroke-dashoffset .95s linear; }
+  .timer-dial.paused .tring-fg { stroke: var(--accent-2); }
+  .timer-dial .tctr {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; line-height: 1;
+  }
+  .timer-dial .tnum { font-size: 38px; font-weight: 700; letter-spacing: -0.02em; }
+  .timer-dial .tstate {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim); font-weight: 650; margin-top: 7px; height: 13px;
+  }
+  .timer-dial .tstate.running { color: var(--accent); }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .preset {
+    appearance: none; cursor: pointer; font-family: var(--sans);
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text-faint);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600;
+    transition: background .14s, border-color .14s, color .14s;
+  }
+  .preset:hover { background: var(--surface-3); border-color: var(--accent-2); color: var(--text); }
+  .preset.active { background: rgba(255,179,71,0.12); border-color: rgba(255,179,71,0.45); color: var(--accent); }
+  .preset:disabled { opacity: 0.4; cursor: default; }
+  .timer-label-in { width: 100%; max-width: 260px; text-align: center; }
+  .timer-ctrls { display: flex; gap: 10px; justify-content: center; }
+  .tctrl {
+    appearance: none; cursor: pointer; font-family: var(--sans);
+    border-radius: 9px; padding: 9px 22px; font-size: 13.5px; font-weight: 650;
+    transition: filter .14s, background .14s, border-color .14s;
+  }
+  .tctrl.start { background: var(--accent); border: 1px solid var(--accent); color: #1a1206; }
+  .tctrl.start:hover { filter: brightness(1.07); }
+  .tctrl.reset { background: var(--surface-2); border: 1px solid var(--line); color: var(--text); }
+  .tctrl.reset:hover { background: var(--surface-3); border-color: var(--accent-2); }
+  .tctrl:disabled { opacity: 0.4; cursor: default; }
+  .timer-foot {
+    width: 100%; border-top: 1px solid var(--line-soft); padding-top: 13px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    font-size: 12.5px; color: var(--text-dim);
+  }
+  .timer-foot b { color: var(--text); font-weight: 650; }
+
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   @media (prefers-reduced-motion: reduce) {
@@ -317,6 +561,7 @@
     .kpis { grid-template-columns: repeat(2, 1fr); }
     .grid-2 { grid-template-columns: 1fr; }
     .grid-cols { grid-template-columns: 1fr; }
+    .grid-goals { grid-template-columns: 1fr; }
   }
   @media (max-width: 560px) {
     .kpis { grid-template-columns: 1fr 1fr; }
@@ -361,6 +606,60 @@
     </div>
   </section>
 
+  <!-- Activity Sessions feed (showcase) -->
+  <section class="card sessions-card" style="margin-bottom: var(--gap);">
+    <div class="card-h">
+      <h2>Activity Sessions</h2>
+      <div class="meta" id="sessionsMeta"></div>
+    </div>
+    <div class="card-body" id="sessionsHost"></div>
+  </section>
+
+  <!-- Goals + Focus Timer -->
+  <div class="grid-goals">
+    <section class="card goals-card">
+      <div class="card-h">
+        <h2>Goals</h2>
+        <button class="iconbtn" id="goalsEditBtn" type="button" aria-expanded="false">&#9881; Edit goals</button>
+      </div>
+      <div class="card-body" id="goalsHost"></div>
+    </section>
+
+    <section class="card timer-card">
+      <div class="card-h">
+        <h2>Focus Timer</h2>
+        <div class="meta" id="timerMeta"></div>
+      </div>
+      <div class="card-body">
+        <div class="timer-dial" id="timerDial">
+          <svg width="184" height="184" viewBox="0 0 184 184" aria-hidden="true">
+            <circle class="tring-bg" cx="92" cy="92" r="82" fill="none" stroke-width="11"></circle>
+            <circle class="tring-fg" id="timerArc" cx="92" cy="92" r="82" fill="none" stroke-width="11" stroke-linecap="round"></circle>
+          </svg>
+          <div class="tctr">
+            <div class="tnum num" id="timerNum">25:00</div>
+            <div class="tstate" id="timerState">ready</div>
+          </div>
+        </div>
+        <div class="presets" id="timerPresets">
+          <button class="preset active" type="button" data-min="25">25m</button>
+          <button class="preset" type="button" data-min="50">50m</button>
+          <button class="preset" type="button" data-min="custom">Custom</button>
+        </div>
+        <input class="inp timer-label-in" id="timerLabel" type="text" maxlength="60"
+          placeholder="What are you focusing on? (optional)" autocomplete="off">
+        <div class="timer-ctrls">
+          <button class="tctrl start" id="timerStart" type="button">Start</button>
+          <button class="tctrl reset" id="timerReset" type="button" disabled>Reset</button>
+        </div>
+        <div class="timer-foot">
+          <span id="timerSessionsToday">No focus sessions yet today</span>
+          <span id="timerTotalToday"></span>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <!-- Donut + Weekly -->
   <div class="grid-2">
     <section class="card donut-card">
@@ -402,6 +701,9 @@
     today: null,       // days[0]
     pollTimer: null,
     lastDay: null,     // last /api/day payload
+    sessionsShown: 8,  // progressive reveal count for the sessions feed
+    lastSessions: [],  // last /api/sessions payload for selected day
+    lastGoals: null,   // last /api/goals payload
   };
 
   var DEFAULT_COLOR = "#6f7bdd";
@@ -552,10 +854,15 @@
 
   function selectDate(date, isBoot) {
     state.selected = date;
+    state.sessionsShown = 8; // reset reveal count on date change
+    closeGoalsEditor();
     updateHeader();
     renderLoading();
     loadDay(date);
     loadRange();
+    loadSessions(date);
+    loadGoals();
+    loadFocusSessions(date);
     setupPolling();
   }
 
@@ -580,6 +887,9 @@
       state.pollTimer = setInterval(function () {
         loadDay(state.selected, true);
         loadRange();
+        loadSessions(state.selected, true);
+        loadGoals(true);
+        loadFocusSessions(state.selected, true);
       }, 15000);
     }
   }
@@ -596,6 +906,8 @@
     $("weekHost").innerHTML = '<div class="skeleton" style="height:200px;"></div>';
     $("sitesHost").innerHTML = '<div class="skeleton" style="height:200px;"></div>';
     $("appsHost").innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+    $("sessionsHost").innerHTML = '<div class="skeleton" style="height:220px;"></div>';
+    $("goalsHost").innerHTML = '<div class="skeleton" style="height:230px;"></div>';
   }
 
   // ---------- Day load ----------
@@ -747,6 +1059,8 @@
         app: b.app || "",
         domain: b.domain || "",
         title: b.title || "",
+        ai_title: b.ai_title || "",
+        ai_summary: b.ai_summary || "",
         category: b.category || "Uncategorized",
         color: color,
         start: s, end: e, seconds: dur
@@ -783,13 +1097,17 @@
       if (!raw) return;
       var b;
       try { b = JSON.parse(decodeURIComponent(raw)); } catch (e) { return; }
-      var head = b.domain || b.app || b.label;
-      var sub = (b.domain && b.app) ? b.app : "";
+      // prefer the AI title as the primary label; fall back to domain/app
+      var hasAi = b.ai_title && String(b.ai_title).trim() !== "";
+      var head = hasAi ? b.ai_title : (b.domain || b.app || b.label);
+      var src = b.domain || b.app || "";
+      var sub = hasAi ? src : ((b.domain && b.app) ? b.app : "");
       var html = '<div class="tt-cat"><span class="sw" style="background:' + escapeHtml(b.color) + ';"></span>'
         + escapeHtml(b.category) + '</div>';
       html += '<div style="font-weight:620;margin-bottom:4px;">' + escapeHtml(head)
         + (sub ? ' <span style="color:var(--text-dim);font-weight:400;">&middot; ' + escapeHtml(sub) + '</span>' : '') + '</div>';
-      if (b.title) html += '<div class="tt-title">' + escapeHtml(b.title) + '</div>';
+      var detail = (b.ai_summary && String(b.ai_summary).trim() !== "") ? b.ai_summary : b.title;
+      if (detail) html += '<div class="tt-title">' + escapeHtml(detail) + '</div>';
       html += '<div class="tt-time"><b>' + escapeHtml(fmtTimeRange(b.start, b.end)) + '</b> &nbsp;&middot;&nbsp; '
         + escapeHtml(fmtDur(b.seconds)) + '</div>';
       tip.innerHTML = html;
@@ -970,6 +1288,576 @@
     }
   }
 
+  // ---------- Activity Sessions feed ----------
+  function loadSessions(date, isPoll) {
+    getJSON("/api/sessions?date=" + encodeURIComponent(date)).then(function (r) {
+      if (date !== state.selected) return;
+      var list = (r && Array.isArray(r.sessions)) ? r.sessions : [];
+      state.lastSessions = list;
+      renderSessions(list);
+    }).catch(function () {
+      if (date !== state.selected) return;
+      if (!isPoll) { state.lastSessions = []; renderSessions(null); }
+    });
+  }
+
+  function renderSessions(list) {
+    var host = $("sessionsHost");
+    var meta = $("sessionsMeta");
+    if (list === null) {
+      meta.textContent = "";
+      host.innerHTML = '<div class="empty"><div class="small">Couldn\'t load sessions for this day.</div></div>';
+      return;
+    }
+    list = Array.isArray(list) ? list : [];
+    if (!list.length) {
+      meta.textContent = "";
+      host.innerHTML = '<div class="empty"><div class="big">No sessions yet</div>'
+        + '<div class="small">Your day reads as a story here once activity is tracked and labeled.</div></div>';
+      return;
+    }
+    meta.textContent = list.length + (list.length === 1 ? " session" : " sessions");
+
+    var shown = Math.min(state.sessionsShown, list.length);
+    var html = '<div class="sfeed">';
+    for (var i = 0; i < shown; i++) {
+      var s = list[i] || {};
+      var color = s.color || catColorFor(s.category);
+      var src = s.domain || s.app || "";
+      var hasTitle = s.ai_title != null && String(s.ai_title).trim() !== "";
+      var titleText = hasTitle ? s.ai_title : (src || "Activity");
+      var startS = Number(s.start), endS = Number(s.end);
+      var dur = Number(s.seconds);
+      if (!isFinite(dur) || dur <= 0) dur = (isFinite(startS) && isFinite(endS)) ? (endS - startS) : 0;
+      var range = (isFinite(startS) && isFinite(endS)) ? fmtTimeRange(startS, endS) : "";
+
+      html += '<div class="srow">'
+        + '<div class="rail"><span class="sdot" style="background:' + escapeHtml(color) + ';"></span></div>'
+        + '<div class="scol">';
+
+      html += '<div class="stitle' + (hasTitle ? '' : ' fallback') + '">' + escapeHtml(titleText);
+      if (!hasTitle) html += '<span class="labeling">labeling&hellip;</span>';
+      html += '</div>';
+
+      // meta line: time range · duration · category · source(when title present)
+      html += '<div class="smeta">';
+      if (range) html += '<span>' + escapeHtml(range) + '</span><span class="sep">&middot;</span>';
+      html += '<span class="dur num">' + escapeHtml(fmtDur(dur)) + '</span>';
+      if (s.category) {
+        html += '<span class="sep">&middot;</span>'
+          + '<span class="scat"><span class="sw" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'
+          + escapeHtml(color) + ';"></span>' + escapeHtml(s.category) + '</span>';
+      }
+      if (hasTitle && src) {
+        html += '<span class="sep">&middot;</span><span class="src" title="' + escapeHtml(src) + '">' + escapeHtml(src) + '</span>';
+      }
+      html += '</div>';
+
+      if (s.ai_summary != null && String(s.ai_summary).trim() !== "") {
+        html += '<div class="ssummary">' + escapeHtml(s.ai_summary) + '</div>';
+      }
+
+      if (Array.isArray(s.ai_tasks) && s.ai_tasks.length) {
+        html += '<div class="schips">';
+        for (var t = 0; t < s.ai_tasks.length; t++) {
+          var task = s.ai_tasks[t];
+          if (task == null || String(task).trim() === "") continue;
+          html += '<span class="schip"><span class="tick">&#10003;</span>'
+            + '<span class="tx" title="' + escapeHtml(task) + '">' + escapeHtml(task) + '</span></span>';
+        }
+        html += '</div>';
+      }
+
+      html += '</div></div>'; // scol, srow
+    }
+    html += '</div>';
+
+    if (list.length > shown) {
+      html += '<div class="sfeed-more"><button class="moreBtn" id="sessMore" type="button">Show '
+        + Math.min(12, list.length - shown) + ' more</button></div>';
+    }
+    host.innerHTML = html;
+
+    var moreBtn = $("sessMore");
+    if (moreBtn) {
+      moreBtn.addEventListener("click", function () {
+        state.sessionsShown += 12;
+        renderSessions(state.lastSessions);
+      });
+    }
+  }
+
+  // ---------- Goals ----------
+  function loadGoals(isPoll) {
+    getJSON("/api/goals").then(function (g) {
+      state.lastGoals = g || {};
+      if (!isEditorOpen()) renderGoals(state.lastGoals);
+    }).catch(function () {
+      if (!isPoll && !state.lastGoals) { state.lastGoals = null; renderGoals(null); }
+    });
+  }
+
+  function goalRing(pct, over) {
+    var p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    var r = 40, c = 2 * Math.PI * r;
+    var off = c * (1 - p / 100);
+    var stroke = over ? "#5fd08a" : "#ffb347";
+    return '<div class="goal-ring">'
+      + '<svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true">'
+      + '<circle cx="48" cy="48" r="' + r + '" fill="none" stroke="#252b3a" stroke-width="9"></circle>'
+      + '<circle cx="48" cy="48" r="' + r + '" fill="none" stroke="' + stroke + '" stroke-width="9" stroke-linecap="round"'
+      + ' stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '"'
+      + ' transform="rotate(-90 48 48)"></circle></svg>'
+      + '<div class="ctr"><div class="pc num' + (over ? ' over' : '') + '">' + Math.round(Number(pct) || 0)
+      + '<span style="font-size:13px;font-weight:600;">%</span></div>'
+      + '<div class="lb">of goal</div></div></div>';
+  }
+
+  // minutes -> "Xh", "Xh Ym", or "Ym"
+  function fmtMin(min) {
+    min = Math.round(Number(min) || 0);
+    if (min < 60) return min + "m";
+    var h = Math.floor(min / 60), m = min - h * 60;
+    return m === 0 ? h + "h" : h + "h " + m + "m";
+  }
+
+  function renderGoals(g) {
+    var host = $("goalsHost");
+    if (g === null) {
+      host.innerHTML = '<div class="empty"><div class="small">Couldn\'t load goals.</div></div>';
+      return;
+    }
+    g = g || {};
+    var today = g.today || {};
+    var goalMin = Number(g.focus_daily_minutes) || 0;
+    var focusMin = Number(today.focus_minutes) || 0;
+    var pct = goalMin > 0 ? Math.round(focusMin / goalMin * 100) : 0;
+    var over = goalMin > 0 && focusMin >= goalMin;
+    var streak = Number(g.streak_days) || 0;
+    var byCat = today.by_category_minutes || {};
+
+    var html = "";
+
+    // top: ring + summary + streak
+    html += '<div class="goal-top">';
+    html += goalRing(pct, over);
+    html += '<div class="ginfo">';
+    html += '<div class="gbig"><b class="num">' + fmtMin(focusMin) + '</b> of ' + (goalMin > 0 ? fmtMin(goalMin) : '—') + '</div>';
+    html += '<div class="gsub">' + (goalMin > 0
+      ? (over ? 'Daily focus goal met — nice.' : fmtMin(Math.max(goalMin - focusMin, 0)) + ' left to hit today’s goal')
+      : 'Set a daily focus goal to track progress') + '</div>';
+    html += '<div class="streak' + (streak > 0 ? '' : ' zero') + '">'
+      + (streak > 0 ? '🔥 ' + streak + '-day streak' : 'No streak yet') + '</div>';
+    html += '</div></div>';
+
+    // 7-day week dots
+    if (Array.isArray(g.week) && g.week.length) {
+      var maxF = 0;
+      g.week.forEach(function (d) { if ((Number(d.focus_minutes) || 0) > maxF) maxF = Number(d.focus_minutes); });
+      if (maxF <= 0) maxF = 1;
+      html += '<div class="gweek"><div class="field-lbl" style="margin-bottom:0;">Last 7 days</div><div class="gweek-row"><div class="gweek-dots">';
+      g.week.forEach(function (d) {
+        var fm = Number(d.focus_minutes) || 0;
+        var h = Math.max(fm / maxF * 100, fm > 0 ? 12 : 0);
+        var isT = d.date === todayStr();
+        html += '<div class="gwd' + (d.met ? ' met' : '') + (isT ? ' today' : '') + '" title="'
+          + escapeHtml(fmtDateLabel(d.date)) + ' — ' + fmtMin(fm) + ' focus' + (d.met ? ' (met)' : '') + '">'
+          + '<div class="pip"><div class="pfill" style="height:' + h.toFixed(1) + '%;"></div></div>'
+          + '<div class="gd">' + weekdayInitial(d.date) + '</div></div>';
+      });
+      html += '</div></div></div>';
+    }
+
+    // category limits
+    var limits = Array.isArray(g.limits) ? g.limits : [];
+    html += '<div><div class="field-lbl">Category limits</div>';
+    if (!limits.length) {
+      html += '<div class="goals-empty-limits">No limits set. Use Edit goals to cap time in a category.</div>';
+    } else {
+      html += '<div class="glimits">';
+      limits.forEach(function (lim) {
+        var name = lim.category || "Category";
+        var max = Number(lim.max_minutes) || 0;
+        var used = Number(byCat[name]) || 0;
+        var ratio = max > 0 ? used / max : 0;
+        var w = Math.min(ratio * 100, 100);
+        var isOver = max > 0 && used > max;
+        var isWarn = !isOver && ratio >= 0.8;
+        var color = catColorFor(name);
+        var fillCls = isOver ? 'over' : (isWarn ? 'warn' : '');
+        html += '<div class="glimit"><div class="glhead">'
+          + '<span class="glname"><span class="sw" style="background:' + escapeHtml(color) + ';"></span>'
+          + '<span class="tx">' + escapeHtml(name) + '</span></span>'
+          + '<span class="glval num' + (isOver ? ' over' : '') + '">' + fmtMin(used) + ' / ' + fmtMin(max)
+          + (isOver ? ' · over' : '') + '</span></div>'
+          + '<div class="gltrack"><div class="glfill ' + fillCls + '" style="width:' + w.toFixed(1) + '%;'
+          + (fillCls === '' ? 'background:' + escapeHtml(color) + ';' : '') + '"></div></div></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // editor panel (hidden until toggled)
+    html += '<div class="gedit" id="goalsEdit"></div>';
+
+    host.innerHTML = html;
+  }
+
+  // ---------- Goals editor ----------
+  var editorOpen = false;
+  function isEditorOpen() { return editorOpen; }
+
+  function closeGoalsEditor() {
+    editorOpen = false;
+    var panel = $("goalsEdit");
+    if (panel) panel.classList.remove("on");
+    var btn = $("goalsEditBtn");
+    if (btn) { btn.setAttribute("aria-expanded", "false"); btn.innerHTML = "⚙ Edit goals"; }
+  }
+
+  function catOptions(selected) {
+    var opts = '<option value=""' + (selected ? '' : ' selected') + '>Select category…</option>';
+    var seen = {};
+    (state.taxonomy || []).forEach(function (c) {
+      if (!c || !c.name || seen[c.name]) return;
+      seen[c.name] = true;
+      opts += '<option value="' + escapeHtml(c.name) + '"' + (c.name === selected ? ' selected' : '') + '>'
+        + escapeHtml(c.name) + '</option>';
+    });
+    // ensure a previously-set category not in taxonomy still shows
+    if (selected && !seen[selected]) {
+      opts += '<option value="' + escapeHtml(selected) + '" selected>' + escapeHtml(selected) + '</option>';
+    }
+    return opts;
+  }
+
+  function limitEditorRow(category, minutes) {
+    return '<div class="editlimit-row">'
+      + '<select class="sel limit-cat">' + catOptions(category) + '</select>'
+      + '<input class="inp num-in limit-min" type="number" min="1" step="1" placeholder="min" value="'
+      + (minutes ? escapeHtml(String(minutes)) : '') + '">'
+      + '<span style="font-size:13px;color:var(--text-dim);">min</span>'
+      + '<button class="rmbtn" type="button" title="Remove limit" aria-label="Remove limit">&times;</button>'
+      + '</div>';
+  }
+
+  function openGoalsEditor() {
+    var panel = $("goalsEdit");
+    if (!panel) return;
+    var g = state.lastGoals || {};
+    var goalMin = Number(g.focus_daily_minutes) || 0;
+    var limits = Array.isArray(g.limits) ? g.limits : [];
+
+    var html = '<div><div class="field-lbl">Daily focus goal</div>'
+      + '<div class="focus-goal-row">'
+      + '<input class="inp num-in" id="editFocusGoal" type="number" min="0" step="5" value="' + goalMin + '">'
+      + '<span class="unit">minutes per day</span></div></div>';
+
+    html += '<div><div class="field-lbl">Category limits</div>'
+      + '<div class="gedit-limits" id="editLimits">';
+    if (limits.length) {
+      limits.forEach(function (l) { html += limitEditorRow(l.category, Number(l.max_minutes) || ''); });
+    }
+    html += '</div>'
+      + '<button class="addlimit" id="addLimitBtn" type="button">+ Add limit</button></div>';
+
+    html += '<div class="gedit-actions">'
+      + '<button class="btn-primary" id="saveGoalsBtn" type="button">Save goals</button>'
+      + '<button class="btn-ghost" id="cancelGoalsBtn" type="button">Cancel</button></div>';
+
+    panel.innerHTML = html;
+    panel.classList.add("on");
+    editorOpen = true;
+    var btn = $("goalsEditBtn");
+    btn.setAttribute("aria-expanded", "true");
+    btn.innerHTML = "✕ Close";
+
+    $("addLimitBtn").addEventListener("click", function () {
+      var wrap = $("editLimits");
+      wrap.insertAdjacentHTML("beforeend", limitEditorRow("", ""));
+      wireLimitRemoval(wrap.lastElementChild);
+    });
+    var rows = panel.querySelectorAll(".editlimit-row");
+    for (var i = 0; i < rows.length; i++) wireLimitRemoval(rows[i]);
+    $("cancelGoalsBtn").addEventListener("click", function () {
+      closeGoalsEditor();
+      renderGoals(state.lastGoals);
+    });
+    $("saveGoalsBtn").addEventListener("click", saveGoals);
+  }
+
+  function wireLimitRemoval(row) {
+    if (!row) return;
+    var btn = row.querySelector(".rmbtn");
+    if (btn) btn.addEventListener("click", function () { row.parentNode.removeChild(row); });
+  }
+
+  function saveGoals() {
+    var panel = $("goalsEdit");
+    if (!panel) return;
+    var focusGoal = Math.max(0, Math.round(Number($("editFocusGoal").value) || 0));
+    var limits = [];
+    var rows = panel.querySelectorAll(".editlimit-row");
+    for (var i = 0; i < rows.length; i++) {
+      var cat = rows[i].querySelector(".limit-cat").value;
+      var min = Math.round(Number(rows[i].querySelector(".limit-min").value) || 0);
+      if (cat && min > 0) limits.push({ category: cat, max_minutes: min });
+    }
+    var saveBtn = $("saveGoalsBtn");
+    saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+
+    fetch("/api/goals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ focus_daily_minutes: focusGoal, limits: limits })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (g) {
+      state.lastGoals = g || {};
+      closeGoalsEditor();
+      renderGoals(state.lastGoals);
+    }).catch(function () {
+      saveBtn.disabled = false; saveBtn.textContent = "Save goals";
+      showBanner("Couldn't save goals — the tracker server didn't accept the change.");
+    });
+  }
+
+  $("goalsEditBtn").addEventListener("click", function () {
+    if (editorOpen) { closeGoalsEditor(); renderGoals(state.lastGoals); }
+    else openGoalsEditor();
+  });
+
+  // ---------- Focus Timer (Pomodoro) ----------
+  var Timer = (function () {
+    var LS_KEY = "tt_focus_timer_v1";
+    var TARC_R = 82, TARC_C = 2 * Math.PI * TARC_R;
+    var tickHandle = null;
+    // st: { running, plannedMin, label, endAt(ms epoch when running), remainingMs(when paused) }
+    var st = { running: false, plannedMin: 25, label: "", endAt: 0, remainingMs: 25 * 60000 };
+
+    function save() {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(st)); } catch (e) {}
+    }
+    function load() {
+      try {
+        var raw = localStorage.getItem(LS_KEY);
+        if (!raw) return;
+        var o = JSON.parse(raw);
+        if (o && typeof o === "object") {
+          st.running = !!o.running;
+          st.plannedMin = Number(o.plannedMin) || 25;
+          st.label = typeof o.label === "string" ? o.label : "";
+          st.endAt = Number(o.endAt) || 0;
+          st.remainingMs = Number(o.remainingMs);
+          if (!isFinite(st.remainingMs)) st.remainingMs = st.plannedMin * 60000;
+        }
+      } catch (e) {}
+    }
+
+    function remainingMs() {
+      if (st.running) return Math.max(0, st.endAt - Date.now());
+      return Math.max(0, st.remainingMs);
+    }
+    function fmtCountdown(ms) {
+      var total = Math.ceil(ms / 1000);
+      var m = Math.floor(total / 60), s = total - m * 60;
+      return (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+    }
+
+    function paint() {
+      var dial = $("timerDial");
+      var arc = $("timerArc");
+      var num = $("timerNum");
+      var stateEl = $("timerState");
+      if (!dial || !arc || !num || !stateEl) return;
+      var totalMs = st.plannedMin * 60000;
+      var rem = remainingMs();
+      var frac = totalMs > 0 ? rem / totalMs : 0;
+      if (frac < 0) frac = 0; if (frac > 1) frac = 1;
+      arc.setAttribute("stroke-dasharray", TARC_C.toFixed(1));
+      arc.setAttribute("stroke-dashoffset", (TARC_C * (1 - frac)).toFixed(1));
+      num.textContent = fmtCountdown(rem);
+      dial.classList.toggle("paused", !st.running && rem < totalMs && rem > 0);
+      if (st.running) { stateEl.textContent = "focusing"; stateEl.classList.add("running"); }
+      else {
+        stateEl.classList.remove("running");
+        stateEl.textContent = (rem < totalMs && rem > 0) ? "paused" : "ready";
+      }
+      $("timerStart").textContent = st.running ? "Pause" : (rem < totalMs && rem > 0 ? "Resume" : "Start");
+      $("timerReset").disabled = st.running ? false : (rem >= totalMs);
+      // preset active state + disabled while running
+      var presets = $("timerPresets").querySelectorAll(".preset");
+      for (var i = 0; i < presets.length; i++) {
+        var pm = presets[i].getAttribute("data-min");
+        presets[i].disabled = st.running;
+        var isActive = (pm === "custom")
+          ? (st.plannedMin !== 25 && st.plannedMin !== 50)
+          : (Number(pm) === st.plannedMin);
+        presets[i].classList.toggle("active", isActive);
+      }
+    }
+
+    function startTick() {
+      if (tickHandle) return;
+      tickHandle = setInterval(function () {
+        if (!st.running) return;
+        if (remainingMs() <= 0) { complete(true); return; }
+        paint();
+      }, 250);
+    }
+    function stopTick() { if (tickHandle) { clearInterval(tickHandle); tickHandle = null; } }
+
+    function start() {
+      var totalMs = st.plannedMin * 60000;
+      var rem = remainingMs();
+      if (rem <= 0) rem = totalMs;
+      st.endAt = Date.now() + rem;
+      st.running = true;
+      var labelInput = $("timerLabel");
+      if (labelInput) st.label = labelInput.value || "";
+      save(); paint(); startTick();
+    }
+    function pause() {
+      st.remainingMs = remainingMs();
+      st.running = false;
+      st.endAt = 0;
+      save(); paint();
+    }
+    function toggle() { if (st.running) pause(); else start(); }
+
+    function reset() {
+      st.running = false;
+      st.endAt = 0;
+      st.remainingMs = st.plannedMin * 60000;
+      save(); paint();
+    }
+
+    // posts a focus_session for elapsed work; completed flag passed through
+    function logSession(completed) {
+      var totalMs = st.plannedMin * 60000;
+      var elapsedMs = totalMs - remainingMs();
+      var elapsedSec = Math.round(elapsedMs / 1000);
+      if (elapsedSec < 60) return false; // ignore <1 min
+      var end = Math.floor(Date.now() / 1000);
+      var start = end - elapsedSec;
+      fetch("/api/focus_session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+          start: start, end: end,
+          planned_minutes: st.plannedMin,
+          completed: !!completed,
+          label: st.label || ""
+        })
+      }).then(function () {
+        // refresh today's focus-session tally
+        loadFocusSessions(state.today, true);
+      }).catch(function () {});
+      return true;
+    }
+
+    function complete(natural) {
+      // natural = countdown reached zero -> completed true
+      logSession(!!natural);
+      st.running = false;
+      st.endAt = 0;
+      st.remainingMs = st.plannedMin * 60000;
+      save(); paint();
+      if (natural) {
+        var stateEl = $("timerState");
+        if (stateEl) { stateEl.textContent = "done 🎉"; }
+      }
+    }
+
+    function setPreset(min) {
+      if (st.running) return;
+      st.plannedMin = min;
+      st.remainingMs = min * 60000;
+      st.endAt = 0;
+      save(); paint();
+    }
+
+    function setupControls() {
+      $("timerStart").addEventListener("click", toggle);
+      $("timerReset").addEventListener("click", function () {
+        // if meaningful work elapsed, log it as a stopped (incomplete) session
+        if (!st.running && remainingMs() >= st.plannedMin * 60000) { reset(); return; }
+        logSession(false);
+        reset();
+      });
+      var presets = $("timerPresets").querySelectorAll(".preset");
+      for (var i = 0; i < presets.length; i++) {
+        (function (btn) {
+          btn.addEventListener("click", function () {
+            var pm = btn.getAttribute("data-min");
+            if (pm === "custom") {
+              var v = prompt("Focus length in minutes:", String(st.plannedMin));
+              if (v == null) return;
+              var n = Math.round(Number(v));
+              if (!isFinite(n) || n < 1) return;
+              if (n > 600) n = 600;
+              setPreset(n);
+            } else {
+              setPreset(Number(pm));
+            }
+          });
+        })(presets[i]);
+      }
+      var labelInput = $("timerLabel");
+      if (labelInput) {
+        labelInput.value = st.label || "";
+        labelInput.addEventListener("input", function () { st.label = labelInput.value || ""; save(); });
+      }
+    }
+
+    function init() {
+      load();
+      setupControls();
+      // if a running timer already elapsed while the page was closed, complete it
+      if (st.running && remainingMs() <= 0) {
+        complete(true);
+      } else {
+        paint();
+        if (st.running) startTick();
+      }
+    }
+
+    return { init: init };
+  })();
+
+  // ---------- Focus sessions tally (today's completed) ----------
+  function loadFocusSessions(date, isPoll) {
+    getJSON("/api/focus_sessions?date=" + encodeURIComponent(date)).then(function (r) {
+      // only reflect in the footer when the footer is "today"-scoped is fine; show selected day's
+      if (date !== state.selected && date !== state.today) return;
+      var list = (r && Array.isArray(r.sessions)) ? r.sessions : [];
+      renderFocusTally(list);
+    }).catch(function () {
+      if (!isPoll) renderFocusTally([]);
+    });
+  }
+
+  function renderFocusTally(list) {
+    var countEl = $("timerSessionsToday");
+    var totalEl = $("timerTotalToday");
+    var metaEl = $("timerMeta");
+    if (!countEl || !totalEl) return;
+    var done = list.filter(function (s) { return s && s.completed; });
+    var totalMin = 0;
+    list.forEach(function (s) { totalMin += Number(s.planned_minutes) || 0; });
+    var scope = (state.selected === state.today) ? "today" : "this day";
+    if (!list.length) {
+      countEl.textContent = "No focus sessions " + scope;
+      totalEl.textContent = "";
+      if (metaEl) metaEl.textContent = "";
+    } else {
+      countEl.innerHTML = '<b>' + done.length + '</b> completed · ' + list.length + ' total';
+      totalEl.innerHTML = '<b class="num">' + fmtMin(totalMin) + '</b> planned';
+      if (metaEl) metaEl.textContent = done.length + " done " + scope;
+    }
+  }
+
   // ---------- Nav wiring ----------
   $("prevBtn").addEventListener("click", function () { selectDate(shiftDate(state.selected, -1)); });
   $("nextBtn").addEventListener("click", function () {
@@ -985,6 +1873,7 @@
   });
 
   // ---------- Go ----------
+  Timer.init();
   boot();
 })();
 </script>

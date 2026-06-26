@@ -83,6 +83,71 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(analytics.range_summary(conn, days))
                 finally:
                     conn.close()
+            elif u.path == "/api/sessions":
+                date = self._date_param(u)
+                conn = db.connect()
+                try:
+                    self._json(analytics.sessions_list(conn, date))
+                finally:
+                    conn.close()
+            elif u.path == "/api/focus_sessions":
+                date = self._date_param(u)
+                conn = db.connect()
+                try:
+                    self._json(analytics.focus_sessions_list(conn, date))
+                finally:
+                    conn.close()
+            elif u.path == "/api/goals":
+                import goals
+                conn = db.connect()
+                try:
+                    self._json(goals.status(conn))
+                finally:
+                    conn.close()
+            else:
+                self._json({"error": "not found"}, 404)
+        except Exception as e:  # noqa: BLE001
+            self._json({"error": str(e)}, 500)
+
+    def _date_param(self, u):
+        from datetime import datetime
+        date = parse_qs(u.query).get("date", [""])[0]
+        return date if DATE_RE.match(date) else datetime.now().strftime("%Y-%m-%d")
+
+    def _read_body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        if not length:
+            return {}
+        try:
+            return json.loads(self.rfile.read(length).decode())
+        except Exception:
+            return {}
+
+    def do_POST(self):
+        u = urlparse(self.path)
+        try:
+            body = self._read_body()
+            if u.path == "/api/goals":
+                import goals
+                goals.save(body)
+                conn = db.connect()
+                try:
+                    self._json(goals.status(conn))
+                finally:
+                    conn.close()
+            elif u.path == "/api/focus_session":
+                conn = db.connect()
+                try:
+                    db.add_focus_session(
+                        conn,
+                        float(body.get("start", 0)), float(body.get("end", 0)),
+                        int(body.get("planned_minutes", 0)),
+                        bool(body.get("completed", False)),
+                        (body.get("label") or "").strip()[:120],
+                    )
+                    self._json({"ok": True})
+                finally:
+                    conn.close()
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as e:  # noqa: BLE001

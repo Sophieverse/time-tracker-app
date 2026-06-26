@@ -47,6 +47,39 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Sessionized, AI-labeled activity blocks (the "story of the day").
+CREATE TABLE IF NOT EXISTS sessions (
+    start_ts   REAL PRIMARY KEY,        -- block start (stable id; sessionization is deterministic)
+    end_ts     REAL NOT NULL,
+    seconds    REAL NOT NULL,
+    app        TEXT,
+    domain     TEXT,
+    category   TEXT,
+    ai_title   TEXT,
+    ai_summary TEXT,
+    ai_tasks   TEXT,                     -- JSON array
+    labeled    INTEGER NOT NULL DEFAULT 0
+);
+
+-- Pomodoro / focus-timer sessions started from the dashboard.
+CREATE TABLE IF NOT EXISTS focus_sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_ts        REAL NOT NULL,
+    end_ts          REAL NOT NULL,
+    planned_minutes INTEGER,
+    completed       INTEGER NOT NULL DEFAULT 0,
+    label           TEXT
+);
+
+-- Answers to the idle "what were you doing?" prompt.
+CREATE TABLE IF NOT EXISTS annotations (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_ts REAL NOT NULL,
+    end_ts   REAL NOT NULL,
+    note     TEXT,
+    created  REAL NOT NULL
+);
 """
 
 
@@ -124,3 +157,76 @@ def set_meta(conn, key: str, value: str) -> None:
         (key, value),
     )
     conn.commit()
+
+
+# ── sessions (AI-labeled blocks) ─────────────────────────────────────────────
+
+def upsert_session(conn, start_ts, end_ts, seconds, app, domain, category) -> None:
+    """Insert a finalized block, or extend an existing one's end/seconds.
+    Never clobbers an existing AI label (labeled stays as-is)."""
+    conn.execute(
+        """INSERT INTO sessions (start_ts,end_ts,seconds,app,domain,category,labeled)
+           VALUES (?,?,?,?,?,?,0)
+           ON CONFLICT(start_ts) DO UPDATE SET
+             end_ts=excluded.end_ts, seconds=excluded.seconds,
+             app=excluded.app, domain=excluded.domain, category=excluded.category""",
+        (start_ts, end_ts, seconds, app, domain, category),
+    )
+    conn.commit()
+
+
+def unlabeled_sessions(conn, limit=40):
+    return conn.execute(
+        "SELECT * FROM sessions WHERE labeled=0 ORDER BY start_ts DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+
+
+def label_session(conn, start_ts, title, summary, tasks_json) -> None:
+    conn.execute(
+        "UPDATE sessions SET ai_title=?, ai_summary=?, ai_tasks=?, labeled=1 WHERE start_ts=?",
+        (title, summary, tasks_json, start_ts),
+    )
+    conn.commit()
+
+
+def sessions_for_range(conn, start, end):
+    return conn.execute(
+        "SELECT * FROM sessions WHERE start_ts >= ? AND start_ts < ? ORDER BY start_ts",
+        (start, end),
+    ).fetchall()
+
+
+# ── focus sessions ───────────────────────────────────────────────────────────
+
+def add_focus_session(conn, start_ts, end_ts, planned_minutes, completed, label) -> None:
+    conn.execute(
+        """INSERT INTO focus_sessions (start_ts,end_ts,planned_minutes,completed,label)
+           VALUES (?,?,?,?,?)""",
+        (start_ts, end_ts, planned_minutes, 1 if completed else 0, label),
+    )
+    conn.commit()
+
+
+def focus_sessions_for_range(conn, start, end):
+    return conn.execute(
+        "SELECT * FROM focus_sessions WHERE start_ts >= ? AND start_ts < ? ORDER BY start_ts",
+        (start, end),
+    ).fetchall()
+
+
+# ── annotations (idle-prompt answers) ────────────────────────────────────────
+
+def add_annotation(conn, start_ts, end_ts, note) -> None:
+    conn.execute(
+        "INSERT INTO annotations (start_ts,end_ts,note,created) VALUES (?,?,?,?)",
+        (start_ts, end_ts, note, time.time()),
+    )
+    conn.commit()
+
+
+def annotations_for_range(conn, start, end):
+    return conn.execute(
+        "SELECT * FROM annotations WHERE start_ts >= ? AND start_ts < ? ORDER BY start_ts",
+        (start, end),
+    ).fetchall()

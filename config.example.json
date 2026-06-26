@@ -2,5 +2,10 @@
   "token": "ghp_your_personal_access_token_here",
   "owner": "Sophieverse",
   "repo": "time-tracker-logs",
-  "folder": "logs"
+  "folder": "logs",
+
+  "idle_prompt": true,
+  "idle_prompt_min_minutes": 5,
+  "distraction_alerts": true,
+  "distraction_threshold_minutes": 30
 }

@@ -1,4 +1,6 @@
 config.json
+goals.json
 data/
+scratch_*
 *.pyc
 __pycache__/
