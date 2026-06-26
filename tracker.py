@@ -1,57 +1,48 @@
 #!/usr/bin/env python3
-"""Time Tracker — a local macOS agent that logs time spent per website and
-syncs a daily JSON file to a GitHub repo.
+"""Time Tracker — the always-on sampler.
 
-How it works
-------------
-Every SAMPLE_INTERVAL seconds it asks macOS:
-  1. Is the keyboard/mouse idle?            (ioreg HIDIdleTime)  → if so, skip
-  2. What app is frontmost?                 (System Events)
-  3. If it's a browser, what's the active tab URL?  (AppleScript)
+Every SAMPLE_INTERVAL seconds it reads, via macOS built-ins (osascript/ioreg):
+  • how long the keyboard/mouse has been idle,
+  • the frontmost app,
+  • and, if that app is a browser, the active tab's URL + title.
 
-It credits the elapsed wall-clock time to that tab's domain, keeps a running
-total in data/<date>.json, and every PUSH_INTERVAL seconds commits that file
-to GitHub via the Contents API.
+It writes one fine-grained row to the SQLite event log (db.events) per credited
+interval. Everything the dashboard shows — timeline, categories, focus score,
+trends — is derived from that log by analytics.py.
 
-Everything uses only the Python standard library and macOS built-ins
-(osascript, ioreg) — nothing to pip-install, nothing to compile.
+Two guards keep the data honest (learned the hard way from a focus-stealing
+academic tab):
+  • debounce  — a tab/app must be frontmost for two consecutive samples before
+                it earns any time, so a page that steals focus for one tick
+                (or a momentary app flicker) is never credited.
+  • sleep-gap — if far more than one interval of wall-clock elapsed, the machine
+                was asleep/suspended; we credit nothing for that gap.
 
-The first time it tries to read a browser's tab, macOS shows the
-"<App> wants access to control <Browser>" prompt. Click OK once per browser
-and tracking begins. That prompt IS the browser-access request.
+On a cadence it also categorizes new domains/apps and pushes a daily summary to
+GitHub. Stdlib + macOS only for tracking; the optional Claude categorization
+uses the anthropic SDK if available.
 """
 from __future__ import annotations
 
-import base64
-import json
 import os
 import subprocess
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime
 from urllib.parse import urlsplit
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(HERE, "data")
-CONFIG_PATH = os.path.join(HERE, "config.json")
+import db
 
 # ── Tunables ──────────────────────────────────────────────────────────────
-SAMPLE_INTERVAL = 15          # seconds between readings
-PUSH_INTERVAL = 600           # seconds between GitHub pushes (10 min)
-IDLE_THRESHOLD = 120          # seconds of no input → stop counting
-MAX_CREDIT = SAMPLE_INTERVAL * 3  # cap one interval's credit (covers sleep/wake)
-DEBUG = bool(os.environ.get("TT_DEBUG"))  # log every sample to data/samples.log
+SAMPLE_INTERVAL = 10           # seconds between readings (granular)
+PUSH_INTERVAL = 300            # GitHub sync cadence (5 min)
+CATEGORIZE_INTERVAL = 300      # categorize new keys every 5 min
+IDLE_THRESHOLD = 120           # seconds of no input → stop counting
+MAX_CREDIT = SAMPLE_INTERVAL * 3
+DEBUG = bool(os.environ.get("TT_DEBUG"))
 
-# Frontmost-app name → friendly browser label. These apps expose an
-# active-tab URL via AppleScript; everything else is ignored.
 BROWSER_APPS = {
-    "Google Chrome": "Chrome",
-    "Arc": "Arc",
-    "Safari": "Safari",
-    "Brave Browser": "Brave",
-    "Microsoft Edge": "Edge",
-    "Dia": "Dia",
+    "Google Chrome": "Chrome", "Arc": "Arc", "Safari": "Safari",
+    "Brave Browser": "Brave", "Microsoft Edge": "Edge", "Dia": "Dia",
 }
 
 
@@ -59,10 +50,8 @@ BROWSER_APPS = {
 
 def _osa(script: str, timeout: float = 3.0) -> str | None:
     try:
-        out = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True, text=True, timeout=timeout,
-        )
+        out = subprocess.run(["osascript", "-e", script],
+                             capture_output=True, text=True, timeout=timeout)
         if out.returncode == 0:
             return out.stdout.strip()
     except Exception:
@@ -71,11 +60,9 @@ def _osa(script: str, timeout: float = 3.0) -> str | None:
 
 
 def idle_seconds() -> float:
-    """Seconds since last keyboard/mouse input."""
     try:
-        out = subprocess.run(
-            ["ioreg", "-c", "IOHIDSystem"], capture_output=True, text=True, timeout=3
-        ).stdout
+        out = subprocess.run(["ioreg", "-c", "IOHIDSystem"],
+                             capture_output=True, text=True, timeout=3).stdout
         for line in out.splitlines():
             if "HIDIdleTime" in line:
                 return int(line.rsplit("=", 1)[1].strip()) / 1_000_000_000
@@ -85,15 +72,19 @@ def idle_seconds() -> float:
 
 
 def frontmost_app() -> str | None:
-    return _osa(
-        'tell application "System Events" to get name of first process whose frontmost is true'
-    )
+    return _osa('tell application "System Events" to get name of first '
+                'process whose frontmost is true')
 
 
-def active_tab_url(app_name: str) -> str | None:
+def active_tab(app_name: str) -> tuple[str | None, str | None]:
+    """(url, title) of the front window's active tab for a browser."""
     if app_name == "Safari":
-        return _osa('tell application "Safari" to get URL of current tab of front window')
-    return _osa(f'tell application "{app_name}" to get URL of active tab of front window')
+        url = _osa('tell application "Safari" to get URL of current tab of front window')
+        title = _osa('tell application "Safari" to get name of current tab of front window')
+    else:
+        url = _osa(f'tell application "{app_name}" to get URL of active tab of front window')
+        title = _osa(f'tell application "{app_name}" to get title of active tab of front window')
+    return (url or None), (title or None)
 
 
 def domain_of(url: str | None) -> str | None:
@@ -108,110 +99,76 @@ def domain_of(url: str | None) -> str | None:
         return None
 
 
-# ── Local storage ───────────────────────────────────────────────────────────
+# ── GitHub sync (daily summary) ──────────────────────────────────────────────
 
-def today_key() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
-
-
-def log_path(date: str) -> str:
-    return os.path.join(DATA_DIR, f"{date}.json")
-
-
-def load_day(date: str) -> dict:
+def _load_config() -> dict:
+    import json
     try:
-        with open(log_path(date)) as f:
-            return json.load(f).get("domains", {})
-    except Exception:
-        return {}
-
-
-def save_day(date: str, domains: dict) -> None:
-    os.makedirs(DATA_DIR, exist_ok=True)
-    payload = {
-        "date": date,
-        "updated": datetime.now().isoformat(timespec="seconds"),
-        "domains": dict(sorted(domains.items(), key=lambda kv: -kv[1])),
-    }
-    tmp = log_path(date) + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(payload, f, indent=2)
-    os.replace(tmp, log_path(date))
-
-
-# ── GitHub sync ──────────────────────────────────────────────────────────────
-
-def load_config() -> dict:
-    try:
-        with open(CONFIG_PATH) as f:
+        with open(os.path.join(os.path.dirname(__file__), "config.json")) as f:
             return json.load(f)
     except Exception:
         return {}
 
 
-def push_to_github(date: str) -> bool:
-    cfg = load_config()
+def push_to_github(conn, date_str: str) -> bool:
+    import base64
+    import json
+    import urllib.error
+    import urllib.request
+    import analytics
+
+    cfg = _load_config()
     token = cfg.get("token") or os.environ.get("GITHUB_TOKEN")
     owner, repo = cfg.get("owner"), cfg.get("repo")
-    folder = cfg.get("folder", "logs").strip("/")
+    folder = (cfg.get("folder") or "logs").strip("/")
     if not (token and owner and repo):
         return False
 
-    path = f"{folder}/{date}.json" if folder else f"{date}.json"
+    summary = analytics.day_summary(conn, date_str)
+    # Trim the timeline for the committed copy (keep it lightweight & private-ish).
+    summary = {k: v for k, v in summary.items() if k != "timeline"}
+    summary["generated"] = datetime.now().isoformat(timespec="seconds")
+    content = base64.b64encode(json.dumps(summary, indent=2).encode()).decode()
+
+    path = f"{folder}/{date_str}.json" if folder else f"{date_str}.json"
     api = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    headers = {"Authorization": f"token {token}",
+               "Accept": "application/vnd.github+json",
+               "User-Agent": "time-tracker-app"}
 
-    try:
-        with open(log_path(date), "rb") as f:
-            raw = f.read()
-    except Exception:
-        return False
-    content_b64 = base64.b64encode(raw).decode()
-
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "time-tracker-app",
-    }
-
-    # Fetch current SHA if the file already exists (required to update it).
     sha = None
     try:
-        req = urllib.request.Request(api, headers=headers)
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(urllib.request.Request(api, headers=headers), timeout=15) as r:
             sha = json.load(r).get("sha")
     except urllib.error.HTTPError as e:
         if e.code != 404:
-            print(f"[github] GET failed: {e.code}")
+            print(f"[github] GET {e.code}")
     except Exception as e:
         print(f"[github] GET error: {e}")
 
-    body = {"message": f"time-tracker: update {date}", "content": content_b64}
+    body = {"message": f"time-tracker: {date_str}", "content": content}
     if sha:
         body["sha"] = sha
-
     try:
-        req = urllib.request.Request(
-            api, data=json.dumps(body).encode(), headers=headers, method="PUT"
-        )
+        req = urllib.request.Request(api, data=json.dumps(body).encode(),
+                                     headers=headers, method="PUT")
         with urllib.request.urlopen(req, timeout=15) as r:
             return r.status in (200, 201)
-    except urllib.error.HTTPError as e:
-        print(f"[github] PUT failed: {e.code} {e.read().decode()[:200]}")
     except Exception as e:
         print(f"[github] PUT error: {e}")
-    return False
+        return False
 
 
 # ── Main loop ────────────────────────────────────────────────────────────────
 
 def run() -> None:
-    print(f"[time-tracker] started, sampling every {SAMPLE_INTERVAL}s, "
-          f"pushing every {PUSH_INTERVAL}s")
-    date = today_key()
-    domains = load_day(date)
+    print(f"[time-tracker] started · sample {SAMPLE_INTERVAL}s · "
+          f"push {PUSH_INTERVAL}s · idle>{IDLE_THRESHOLD}s pauses")
+    conn = db.connect()
     last_sample = time.time()
     last_push = 0.0
-    prev_key = None  # (app, domain) of the previous sample — for debounce
+    last_cat = 0.0
+    prev_key = None
 
     while True:
         time.sleep(SAMPLE_INTERVAL)
@@ -219,53 +176,52 @@ def run() -> None:
         gap = now - last_sample
         last_sample = now
 
-        # Rollover at midnight: flush yesterday, start a fresh day.
-        cur = today_key()
-        if cur != date:
-            save_day(date, domains)
-            push_to_github(date)
-            date, domains = cur, load_day(cur)
-
         idle = idle_seconds()
         app = frontmost_app()
-        label = BROWSER_APPS.get(app) if app else None
-        url = active_tab_url(app) if label else None
-        d = domain_of(url)
-        cur_key = (app, d) if d else None
+        is_browser = bool(app and app in BROWSER_APPS)
+        url = title = domain = None
+        if is_browser:
+            url, title = active_tab(app)
+            domain = domain_of(url)
+        cur_key = (app, domain) if app else None
 
-        # Guard 1 — sleep/wake gap: if far more than one interval elapsed, the
-        # machine was asleep or suspended. We have no idea what was actually in
-        # front during that gap, so credit nothing and just re-establish state.
         slept = gap > SAMPLE_INTERVAL * 1.6
-
-        # Guard 2 — debounce: only credit a tab that was *also* frontmost on the
-        # previous sample. A page that steals focus for a single tick (or a
-        # momentary app flicker) never matches its neighbours, so it earns zero.
         stable = cur_key is not None and cur_key == prev_key
         elapsed = min(gap, MAX_CREDIT)
+
         credited = False
-        if d and stable and not slept and idle <= IDLE_THRESHOLD:
-            domains[d] = round(domains.get(d, 0) + elapsed, 1)
-            save_day(date, domains)
+        if app and stable and not slept and idle <= IDLE_THRESHOLD:
+            # Credit the interval. Browser → store domain/url/title; native app
+            # → just the app (the activity key is the app name itself).
+            db.add_event(conn, ts=now - elapsed, dur=elapsed, app=app,
+                         is_browser=is_browser, domain=domain, url=url, title=title)
             credited = True
 
         prev_key = cur_key
 
         if DEBUG:
-            why = "+%.0fs→%s" % (elapsed, d) if credited else (
-                "slept" if slept else
-                "idle" if idle > IDLE_THRESHOLD else
-                "debounce" if d and not stable else "-")
-            with open(os.path.join(DATA_DIR, "samples.log"), "a") as fh:
+            why = (f"+{elapsed:.0f}s→{domain or app}" if credited else
+                   "slept" if slept else
+                   "idle" if idle > IDLE_THRESHOLD else
+                   "debounce" if app and not stable else "-")
+            with open(os.path.join(db.DATA_DIR, "samples.log"), "a") as fh:
                 fh.write(f"{datetime.now():%H:%M:%S} gap={gap:5.0f} idle={idle:5.0f} "
-                         f"app={app!r:24} url={(url or '')[:55]!r} {why}\n")
+                         f"app={app!r:22} dom={(domain or '')!r:22} {why}\n")
+
+        if now - last_cat >= CATEGORIZE_INTERVAL:
+            last_cat = now
+            try:
+                import categorize
+                categorize.run()
+            except Exception as e:
+                print(f"[categorize] {e}")
 
         if now - last_push >= PUSH_INTERVAL:
-            ok = push_to_github(date)
             last_push = now
-            if ok:
-                print(f"[time-tracker] synced {date} "
-                      f"({len(domains)} domains) at {datetime.now():%H:%M}")
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            if push_to_github(conn, date_str):
+                db.set_meta(conn, "last_sync", str(now))
+                print(f"[time-tracker] synced {date_str} at {datetime.now():%H:%M}")
 
 
 if __name__ == "__main__":

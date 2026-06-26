@@ -1,0 +1,990 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time Tracker</title>
+<style>
+  :root {
+    /* Palette: slate-indigo ground, amber accent for focus/live, indigo for structure */
+    --ground:      #0e1118;
+    --surface:     #161a24;
+    --surface-2:   #1d222e;
+    --surface-3:   #252b3a;
+    --line:        #2c3344;
+    --line-soft:   #232938;
+    --text:        #f2f3f7;
+    --text-dim:    #b9bfce;   /* secondary labels — never dimmer than this */
+    --text-faint:  #c2c8d6;   /* still > #b8b8c0 floor */
+    --accent:      #ffb347;   /* amber: focus + live only */
+    --accent-2:    #6f7bdd;   /* indigo: UI structure */
+    --good:        #5fd08a;   /* live pill green */
+
+    --radius:   14px;
+    --radius-sm: 9px;
+    --gap:      18px;
+
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--ground);
+    /* subtle radial atmosphere top-left, kept quiet */
+    background-image:
+      radial-gradient(1200px 600px at 12% -8%, rgba(111,123,221,0.10), transparent 60%),
+      radial-gradient(900px 500px at 95% 0%, rgba(255,179,71,0.05), transparent 55%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 26px 22px 64px;
+  }
+
+  /* ---------- Header ---------- */
+  header.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 26px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(150deg, var(--accent-2), #4954b0);
+    position: relative; flex: none;
+    box-shadow: 0 4px 14px rgba(73,84,176,0.4);
+  }
+  .brand .mark::after {
+    content: ""; position: absolute; inset: 0;
+    border-radius: inherit;
+    background:
+      linear-gradient(90deg, transparent 46%, rgba(255,255,255,0.85) 46%, rgba(255,255,255,0.85) 54%, transparent 54%),
+      linear-gradient(0deg, transparent 46%, rgba(255,255,255,0.55) 46%, rgba(255,255,255,0.55) 54%, transparent 54%);
+    opacity: 0.85;
+  }
+  .brand h1 {
+    font-size: 19px; font-weight: 680; margin: 0;
+    letter-spacing: -0.015em;
+  }
+  .brand .sub { font-size: 12px; color: var(--text-dim); margin-top: 1px; letter-spacing: 0.01em; }
+
+  .datenav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .navbtn {
+    appearance: none; cursor: pointer;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    width: 34px; height: 34px; border-radius: 9px;
+    font-size: 15px; display: inline-flex; align-items: center; justify-content: center;
+    transition: background .14s ease, border-color .14s ease, opacity .14s ease;
+    line-height: 1;
+  }
+  .navbtn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--accent-2); }
+  .navbtn:disabled { opacity: 0.32; cursor: default; }
+  .datelabel {
+    min-width: 196px; text-align: center;
+    font-size: 15px; font-weight: 620; letter-spacing: -0.01em;
+    padding: 0 6px;
+  }
+  .todaybtn {
+    appearance: none; cursor: pointer; height: 34px; padding: 0 14px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 9px; font-size: 13px; font-weight: 600;
+    transition: background .14s, border-color .14s;
+  }
+  .todaybtn:hover { background: var(--surface-3); border-color: var(--accent-2); }
+  .livepill {
+    display: none; align-items: center; gap: 7px;
+    height: 34px; padding: 0 12px;
+    background: rgba(95,208,138,0.10);
+    border: 1px solid rgba(95,208,138,0.35);
+    color: var(--good); border-radius: 9px;
+    font-size: 12.5px; font-weight: 650; letter-spacing: 0.02em;
+  }
+  .livepill.on { display: inline-flex; }
+  .livepill .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--good);
+    box-shadow: 0 0 0 0 rgba(95,208,138,0.6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(95,208,138,0.55); }
+    70% { box-shadow: 0 0 0 7px rgba(95,208,138,0); }
+    100% { box-shadow: 0 0 0 0 rgba(95,208,138,0); }
+  }
+
+  /* ---------- Card primitive ---------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 12px 30px -20px rgba(0,0,0,0.7);
+  }
+  .card-h {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 18px 0;
+  }
+  .card-h h2 {
+    font-size: 12.5px; font-weight: 680; margin: 0;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim);
+  }
+  .card-h .meta { font-size: 12px; color: var(--text-dim); }
+  .card-body { padding: 16px 18px 18px; }
+
+  /* ---------- KPI row ---------- */
+  .kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: var(--gap); margin-bottom: var(--gap);
+  }
+  .kpi { padding: 18px; position: relative; overflow: hidden; }
+  .kpi .label {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--text-dim); font-weight: 650; margin-bottom: 10px;
+  }
+  .kpi .val {
+    font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1;
+  }
+  .kpi .val small { font-size: 18px; font-weight: 600; color: var(--text-faint); margin-left: 1px; }
+  .kpi .foot { font-size: 12px; color: var(--text-dim); margin-top: 9px; }
+  .kpi .accentbar {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent-2);
+  }
+  .kpi.focus .accentbar { background: var(--accent); }
+  .kpi .ring-wrap { display: flex; align-items: center; gap: 14px; }
+  .kpi .ring-wrap .val { font-size: 28px; }
+
+  /* ---------- Timeline ---------- */
+  .timeline-card .card-body { padding-top: 18px; }
+  .tl-legend-now { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--accent); }
+  .tl-legend-now .ln { width: 14px; height: 2px; background: var(--accent); border-radius: 2px; }
+
+  .timeline {
+    position: relative;
+    width: 100%;
+    height: 78px;
+    margin-top: 6px;
+    border-radius: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    overflow: hidden;
+  }
+  .tl-grid { position: absolute; inset: 0; pointer-events: none; }
+  .tl-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line-soft); }
+  .tl-block {
+    position: absolute; top: 0; bottom: 0;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: filter .12s ease, transform .12s ease;
+    min-width: 2px;
+  }
+  .tl-block:hover { filter: brightness(1.35) saturate(1.1); z-index: 4; }
+  .tl-now {
+    position: absolute; top: -3px; bottom: -3px; width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(255,179,71,0.7);
+    pointer-events: none; z-index: 5;
+  }
+  .tl-now::before {
+    content: ""; position: absolute; top: 0; left: -3px;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  }
+  .tl-axis {
+    position: relative; width: 100%; height: 18px; margin-top: 7px;
+    font-size: 10.5px; color: var(--text-dim);
+  }
+  .tl-tick { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+  .tl-tick.edge-l { transform: translateX(0); }
+  .tl-tick.edge-r { transform: translateX(-100%); }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed; z-index: 99; pointer-events: none;
+    background: #0a0d14;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 12px 34px -8px rgba(0,0,0,0.8);
+    max-width: 300px; opacity: 0; transition: opacity .1s ease;
+    font-size: 12.5px;
+  }
+  .tooltip.on { opacity: 1; }
+  .tooltip .tt-cat { display: flex; align-items: center; gap: 7px; font-weight: 650; margin-bottom: 5px; }
+  .tooltip .tt-cat .sw { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .tooltip .tt-title { color: var(--text-faint); margin-bottom: 6px; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .tooltip .tt-time { color: var(--text-dim); font-size: 12px; }
+  .tooltip .tt-time b { color: var(--text); font-weight: 650; }
+
+  /* ---------- 2-col grid below timeline ---------- */
+  .grid-2 { display: grid; grid-template-columns: 1.05fr 1.55fr; gap: var(--gap); margin-bottom: var(--gap); }
+  .grid-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); margin-bottom: var(--gap); }
+
+  /* ---------- Donut ---------- */
+  .donut-card .card-body { display: flex; flex-direction: column; }
+  .donut-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .donut-svg { flex: none; }
+  .donut-center-big { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; }
+  .donut-center-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; fill: var(--text-dim); }
+  .cat-legend { flex: 1 1 200px; min-width: 180px; display: flex; flex-direction: column; gap: 2px; }
+  .cat-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 7px; transition: background .12s; }
+  .cat-row:hover { background: var(--surface-2); }
+  .cat-row .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .cat-row .nm { flex: 1; font-size: 13.5px; font-weight: 540; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat-row .tm { font-size: 13px; color: var(--text-faint); }
+  .cat-row .pct { font-size: 12px; color: var(--text-dim); width: 42px; text-align: right; }
+
+  /* ---------- Bars (top sites/apps) ---------- */
+  .barlist { display: flex; flex-direction: column; gap: 11px; }
+  .barrow { display: grid; grid-template-columns: 12px minmax(0,1fr) auto; align-items: center; gap: 11px; }
+  .barrow .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .barrow .bcol { min-width: 0; }
+  .barrow .bname {
+    font-size: 13.5px; margin-bottom: 5px; font-weight: 520;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .barrow .btrack { height: 7px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+  .barrow .bfill { height: 100%; border-radius: 5px; transition: width .5s cubic-bezier(.2,.7,.2,1); }
+  .barrow .btime { font-size: 13px; color: var(--text-faint); white-space: nowrap; min-width: 56px; text-align: right; }
+
+  /* ---------- Weekly trends ---------- */
+  .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; }
+  .daycol {
+    display: flex; flex-direction: column; align-items: center; gap: 9px;
+    cursor: pointer; padding: 8px 4px 6px; border-radius: 10px;
+    transition: background .12s;
+  }
+  .daycol:hover { background: var(--surface-2); }
+  .daycol.sel { background: var(--surface-2); outline: 1px solid var(--accent-2); }
+  .daycol .barbox {
+    width: 100%; max-width: 46px; height: 150px;
+    display: flex; flex-direction: column-reverse;
+    border-radius: 7px 7px 4px 4px; overflow: hidden;
+    background: var(--surface-2);
+    position: relative;
+  }
+  .daycol .seg { width: 100%; transition: height .5s cubic-bezier(.2,.7,.2,1); }
+  .daycol .dlabel { font-size: 12px; font-weight: 650; }
+  .daycol.sel .dlabel { color: var(--accent); }
+  .daycol .dtot { font-size: 11px; color: var(--text-dim); }
+  .daycol .dfocus { font-size: 10.5px; color: var(--text-dim); }
+  .daycol .dfocus b { color: var(--accent); font-weight: 650; }
+
+  /* ---------- Empty / loading ---------- */
+  .empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; padding: 34px 18px; text-align: center; color: var(--text-dim);
+  }
+  .empty .big { font-size: 15px; font-weight: 600; color: var(--text-faint); }
+  .empty .small { font-size: 13px; color: var(--text-dim); }
+  .skeleton { background: var(--surface-2); border-radius: 6px; animation: shimmer 1.4s infinite; }
+  @keyframes shimmer { 0%,100% { opacity: 0.55; } 50% { opacity: 0.9; } }
+
+  .banner {
+    display: none; align-items: center; gap: 10px;
+    background: rgba(255,179,71,0.08); border: 1px solid rgba(255,179,71,0.3);
+    color: var(--accent); border-radius: 10px; padding: 11px 14px; font-size: 13px;
+    margin-bottom: var(--gap);
+  }
+  .banner.on { display: flex; }
+
+  .section-title {
+    font-size: 12.5px; font-weight: 680; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim); margin: 0 0 12px 2px;
+  }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 880px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-cols { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .week { gap: 5px; }
+    .datelabel { min-width: 0; font-size: 14px; }
+    .daycol .barbox { height: 118px; }
+    .wrap { padding: 18px 14px 48px; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"></div>
+      <div>
+        <h1>Time Tracker</h1>
+        <div class="sub">Where your hours actually went</div>
+      </div>
+    </div>
+    <div class="datenav">
+      <button class="navbtn" id="prevBtn" title="Previous day" aria-label="Previous day">&#9664;</button>
+      <div class="datelabel num" id="dateLabel">&mdash;</div>
+      <button class="navbtn" id="nextBtn" title="Next day" aria-label="Next day">&#9654;</button>
+      <button class="todaybtn" id="todayBtn">Today</button>
+      <span class="livepill" id="livePill"><span class="dot"></span>live</span>
+    </div>
+  </header>
+
+  <div class="banner" id="banner"></div>
+
+  <!-- KPIs -->
+  <section class="kpis" id="kpis"></section>
+
+  <!-- Timeline -->
+  <section class="card timeline-card" style="margin-bottom: var(--gap);">
+    <div class="card-h">
+      <h2>Daily Timeline</h2>
+      <div class="tl-legend-now" id="tlNowLegend" style="display:none;"><span class="ln"></span>now</div>
+    </div>
+    <div class="card-body">
+      <div id="timelineHost"></div>
+    </div>
+  </section>
+
+  <!-- Donut + Weekly -->
+  <div class="grid-2">
+    <section class="card donut-card">
+      <div class="card-h"><h2>Category Breakdown</h2></div>
+      <div class="card-body" id="donutHost"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Weekly Trends</h2><div class="meta" id="weekMeta"></div></div>
+      <div class="card-body" id="weekHost"></div>
+    </section>
+  </div>
+
+  <!-- Top sites + apps -->
+  <div class="grid-cols">
+    <section class="card">
+      <div class="card-h"><h2>Top Sites</h2><div class="meta" id="sitesMeta"></div></div>
+      <div class="card-body" id="sitesHost"></div>
+    </section>
+    <section class="card">
+      <div class="card-h"><h2>Top Apps</h2><div class="meta" id="appsMeta"></div></div>
+      <div class="card-body" id="appsHost"></div>
+    </section>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip" role="tooltip"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- State ----------
+  var state = {
+    days: [],          // descending date strings
+    taxonomy: [],      // category meta
+    catColor: {},      // name -> color
+    selected: null,    // selected date string
+    today: null,       // days[0]
+    pollTimer: null,
+    lastDay: null,     // last /api/day payload
+  };
+
+  var DEFAULT_COLOR = "#6f7bdd";
+
+  // ---------- Helpers ----------
+  function $(id) { return document.getElementById(id); }
+
+  function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // duration formatter:  <60 -> "Ns", <3600 -> "Mm", else "Hh MMm"
+  function fmtDur(sec) {
+    sec = Math.round(Number(sec) || 0);
+    if (sec < 0) sec = 0;
+    if (sec < 60) return sec + "s";
+    if (sec < 3600 - 30) return Math.round(sec / 60) + "m"; // up to ~59m; 59.5m+ promotes to hours
+    var h = Math.floor(sec / 3600);
+    var m = Math.round((sec - h * 3600) / 60);
+    if (m === 60) { h += 1; m = 0; }
+    return h + "h " + (m < 10 ? "0" + m : m) + "m";
+  }
+
+  // split val into number + small unit for KPI display
+  function fmtDurParts(sec) {
+    sec = Math.round(Number(sec) || 0);
+    if (sec < 60) return [sec, "s"];
+    if (sec < 3600 - 30) return [Math.round(sec / 60), "m"];
+    var h = Math.floor(sec / 3600);
+    var m = Math.round((sec - h * 3600) / 60);
+    if (m === 60) { h += 1; m = 0; }
+    return [h, "h", m < 10 ? "0" + m : String(m), "m"];
+  }
+
+  function fmtClock12(epoch) {
+    var d = new Date(epoch * 1000);
+    var h = d.getHours();
+    var m = d.getMinutes();
+    var ap = h < 12 ? "AM" : "PM";
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ":" + (m < 10 ? "0" + m : m) + " " + ap;
+  }
+  // compact, drops AM/PM if same as partner (used for ranges)
+  function fmtClock12NoSuffix(epoch) {
+    var d = new Date(epoch * 1000);
+    var h = d.getHours();
+    var m = d.getMinutes();
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ":" + (m < 10 ? "0" + m : m);
+  }
+  function ampm(epoch) { return new Date(epoch * 1000).getHours() < 12 ? "AM" : "PM"; }
+
+  function fmtTimeRange(start, end) {
+    var sa = ampm(start), ea = ampm(end);
+    if (sa === ea) {
+      return fmtClock12NoSuffix(start) + "–" + fmtClock12NoSuffix(end) + " " + ea;
+    }
+    return fmtClock12(start) + " – " + fmtClock12(end);
+  }
+
+  var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  // parse YYYY-MM-DD as a LOCAL date (avoid UTC shift)
+  function parseDate(str) {
+    if (!str) return new Date();
+    var p = String(str).split("-");
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  }
+  function fmtDateLabel(str) {
+    var d = parseDate(str);
+    return WEEKDAYS[d.getDay()] + ", " + MONTHS[d.getMonth()] + " " + d.getDate();
+  }
+  function weekdayInitial(str) {
+    var d = parseDate(str);
+    return ["S","M","T","W","T","F","S"][d.getDay()];
+  }
+  function shiftDate(str, delta) {
+    var d = parseDate(str);
+    d.setDate(d.getDate() + delta);
+    var y = d.getFullYear();
+    var m = d.getMonth() + 1;
+    var day = d.getDate();
+    return y + "-" + (m < 10 ? "0" + m : m) + "-" + (day < 10 ? "0" + day : day);
+  }
+  function todayStr() {
+    var d = new Date();
+    var y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+    return y + "-" + (m < 10 ? "0" + m : m) + "-" + (day < 10 ? "0" + day : day);
+  }
+
+  function catColorFor(name, fallback) {
+    if (fallback) return fallback;
+    return state.catColor[name] || DEFAULT_COLOR;
+  }
+
+  // ---------- Fetch ----------
+  function getJSON(url) {
+    return fetch(url, { headers: { "Accept": "application/json" } })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status + " for " + url);
+        return r.json();
+      });
+  }
+
+  function showBanner(msg) {
+    var b = $("banner");
+    if (!msg) { b.classList.remove("on"); b.textContent = ""; return; }
+    b.textContent = msg;
+    b.classList.add("on");
+  }
+
+  // ---------- Boot ----------
+  function boot() {
+    Promise.all([
+      getJSON("/api/days").catch(function () { return null; }),
+      getJSON("/api/categories").catch(function () { return null; })
+    ]).then(function (res) {
+      var days = res[0];
+      var cats = res[1];
+
+      if (Array.isArray(days) && days.length) {
+        state.days = days.slice();
+      } else {
+        // graceful fallback: assume today
+        state.days = [todayStr()];
+        if (!days) showBanner("Couldn't reach the tracker server. Showing an empty day.");
+      }
+      state.today = state.days[0];
+
+      if (cats && Array.isArray(cats.taxonomy)) {
+        state.taxonomy = cats.taxonomy;
+        cats.taxonomy.forEach(function (c) {
+          if (c && c.name) state.catColor[c.name] = c.color || DEFAULT_COLOR;
+        });
+      }
+
+      selectDate(state.today, true);
+    }).catch(function (e) {
+      showBanner("Failed to load dashboard: " + e.message);
+    });
+  }
+
+  function isToday(date) { return date === state.today; }
+
+  function selectDate(date, isBoot) {
+    state.selected = date;
+    updateHeader();
+    renderLoading();
+    loadDay(date);
+    loadRange();
+    setupPolling();
+  }
+
+  function updateHeader() {
+    $("dateLabel").textContent = fmtDateLabel(state.selected);
+    var idx = state.days.indexOf(state.selected);
+    // prev: there is an older date (larger index, since descending)
+    var hasPrev = true; // can always go back in time conceptually; but disable if known to be oldest
+    var oldest = state.days[state.days.length - 1];
+    // allow going earlier than known range too (server may have older days); keep enabled
+    $("prevBtn").disabled = false;
+    // next disabled when viewing today (can't go to the future)
+    $("nextBtn").disabled = isToday(state.selected);
+    $("todayBtn").disabled = isToday(state.selected);
+    $("livePill").classList.toggle("on", isToday(state.selected));
+    $("tlNowLegend").style.display = isToday(state.selected) ? "flex" : "none";
+  }
+
+  function setupPolling() {
+    if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
+    if (isToday(state.selected)) {
+      state.pollTimer = setInterval(function () {
+        loadDay(state.selected, true);
+        loadRange();
+      }, 15000);
+    }
+  }
+
+  // ---------- Loading skeleton ----------
+  function renderLoading() {
+    $("kpis").innerHTML = ["", "", "", ""].map(function () {
+      return '<div class="card kpi"><div class="skeleton" style="height:11px;width:60%;margin-bottom:14px;"></div>'
+        + '<div class="skeleton" style="height:28px;width:50%;"></div>'
+        + '<div class="skeleton" style="height:11px;width:70%;margin-top:12px;"></div></div>';
+    }).join("");
+    $("timelineHost").innerHTML = '<div class="skeleton" style="height:78px;border-radius:10px;"></div>';
+    $("donutHost").innerHTML = '<div class="skeleton" style="height:170px;"></div>';
+    $("weekHost").innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+    $("sitesHost").innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+    $("appsHost").innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+  }
+
+  // ---------- Day load ----------
+  function loadDay(date, isPoll) {
+    getJSON("/api/day?date=" + encodeURIComponent(date)).then(function (d) {
+      if (date !== state.selected) return; // user navigated away mid-flight
+      state.lastDay = d || {};
+      showBanner(null);
+      renderDay(state.lastDay);
+    }).catch(function (e) {
+      if (date !== state.selected) return;
+      if (!isPoll) {
+        renderDay(null);
+        showBanner("No data available for this day.");
+      }
+    });
+  }
+
+  function renderDay(d) {
+    if (!d || typeof d !== "object") {
+      renderKPIs(null);
+      renderTimeline(null);
+      renderDonut(null);
+      renderBars("sitesHost", "sitesMeta", [], "domain");
+      renderBars("appsHost", "appsMeta", [], "app");
+      return;
+    }
+    renderKPIs(d);
+    renderTimeline(d);
+    renderDonut(d);
+    renderBars("sitesHost", "sitesMeta", Array.isArray(d.by_domain) ? d.by_domain : [], "domain");
+    renderBars("appsHost", "appsMeta", Array.isArray(d.by_app) ? d.by_app : [], "app");
+  }
+
+  // ---------- KPIs ----------
+  function kpiCard(label, valHtml, foot, focus) {
+    return '<div class="card kpi' + (focus ? " focus" : "") + '">'
+      + '<div class="accentbar"></div>'
+      + '<div class="label">' + label + '</div>'
+      + valHtml
+      + '<div class="foot">' + foot + '</div></div>';
+  }
+
+  function durValHtml(sec) {
+    var p = fmtDurParts(sec);
+    if (p.length === 2) return '<div class="val num">' + p[0] + '<small>' + p[1] + '</small></div>';
+    return '<div class="val num">' + p[0] + '<small>' + p[1] + '</small> ' + p[2] + '<small>' + p[3] + '</small></div>';
+  }
+
+  function ringHtml(pct) {
+    pct = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    var r = 22, c = 2 * Math.PI * r;
+    var off = c * (1 - pct / 100);
+    return '<div class="ring-wrap">'
+      + '<svg width="58" height="58" viewBox="0 0 58 58" aria-hidden="true">'
+      + '<circle cx="29" cy="29" r="' + r + '" fill="none" stroke="#252b3a" stroke-width="6"></circle>'
+      + '<circle cx="29" cy="29" r="' + r + '" fill="none" stroke="#ffb347" stroke-width="6" stroke-linecap="round"'
+      + ' stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '"'
+      + ' transform="rotate(-90 29 29)"></circle></svg>'
+      + '<div class="val num">' + pct + '<small>%</small></div></div>';
+  }
+
+  function renderKPIs(d) {
+    if (!d) {
+      $("kpis").innerHTML =
+        kpiCard("Total Tracked", '<div class="val num">0<small>s</small></div>', "No activity recorded", false)
+        + kpiCard("Focus Time", '<div class="val num">0<small>s</small></div>', "Productive categories", true)
+        + kpiCard("Focus Score", ringHtml(0), "of active time", true)
+        + kpiCard("Distinct Sites", '<div class="val num">0</div>', "Domains visited", false);
+      return;
+    }
+    var total = d.total_seconds || 0;
+    var active = d.active_seconds || total || 0;
+    var focus = d.focus_seconds || 0;
+    var score = (typeof d.focus_score === "number")
+      ? d.focus_score
+      : (active > 0 ? Math.round(focus / active * 100) : 0);
+    var sites = Array.isArray(d.by_domain) ? d.by_domain.length : 0;
+    var apps = Array.isArray(d.by_app) ? d.by_app.length : 0;
+    var focusPctFoot = active > 0 ? Math.round(focus / active * 100) + "% of tracked time" : "Productive categories";
+
+    $("kpis").innerHTML =
+      kpiCard("Total Tracked", durValHtml(total),
+        (Array.isArray(d.timeline) ? d.timeline.length : 0) + " sessions", false)
+      + kpiCard("Focus Time", durValHtml(focus), focusPctFoot, true)
+      + kpiCard("Focus Score", ringHtml(score), "of active time", true)
+      + kpiCard("Distinct Sites", '<div class="val num">' + sites + '</div>', apps + " apps used", false);
+  }
+
+  // ---------- Timeline ----------
+  var DAY_SECONDS = 86400;
+  function dayStartEpoch(date) {
+    var p = String(date).split("-");
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), 0, 0, 0, 0);
+    return Math.floor(d.getTime() / 1000);
+  }
+
+  function renderTimeline(d) {
+    var host = $("timelineHost");
+    var tl = (d && Array.isArray(d.timeline)) ? d.timeline : [];
+    var dayStart = dayStartEpoch(state.selected);
+    var dayEnd = dayStart + DAY_SECONDS;
+
+    // axis ticks every 3 hours
+    var axis = '<div class="tl-axis">';
+    for (var h = 0; h <= 24; h += 3) {
+      var pos = (h / 24) * 100;
+      var cls = "tl-tick";
+      if (h === 0) cls += " edge-l";
+      if (h === 24) cls += " edge-r";
+      var lbl = h === 0 ? "12 AM" : h === 12 ? "12 PM" : h === 24 ? "12 AM" : (h < 12 ? h + " AM" : (h - 12) + " PM");
+      axis += '<span class="' + cls + '" style="left:' + pos + '%;">' + lbl + '</span>';
+    }
+    axis += "</div>";
+
+    // gridlines every hour
+    var grid = '<div class="tl-grid">';
+    for (var g = 1; g < 24; g++) {
+      grid += '<span class="tl-gridline" style="left:' + ((g / 24) * 100) + '%;"></span>';
+    }
+    grid += "</div>";
+
+    if (!tl.length) {
+      host.innerHTML = '<div class="timeline">' + grid
+        + '<div class="empty" style="position:absolute;inset:0;padding:0;">'
+        + '<div class="small">No tracked activity for this day</div></div></div>' + axis;
+      return;
+    }
+
+    var blocks = "";
+    var nowMarker = "";
+    for (var i = 0; i < tl.length; i++) {
+      var b = tl[i];
+      if (!b) continue;
+      var s = Number(b.start), e = Number(b.end);
+      if (!isFinite(s) || !isFinite(e)) continue;
+      // clamp to day window
+      var cs = Math.max(s, dayStart);
+      var ce = Math.min(e, dayEnd);
+      if (ce <= cs) ce = cs + 1;
+      var leftPct = ((cs - dayStart) / DAY_SECONDS) * 100;
+      var widthPct = ((ce - cs) / DAY_SECONDS) * 100;
+      if (leftPct < 0) leftPct = 0;
+      if (leftPct > 100) continue;
+      var color = b.color || catColorFor(b.category);
+      var dur = b.seconds || (e - s);
+      var data = encodeURIComponent(JSON.stringify({
+        label: b.domain || b.app || "Activity",
+        app: b.app || "",
+        domain: b.domain || "",
+        title: b.title || "",
+        category: b.category || "Uncategorized",
+        color: color,
+        start: s, end: e, seconds: dur
+      }));
+      blocks += '<div class="tl-block" style="left:' + leftPct.toFixed(3) + '%;width:'
+        + Math.max(widthPct, 0.18).toFixed(3) + '%;background:' + color + ';" data-b="' + data + '"></div>';
+    }
+
+    if (isToday(state.selected)) {
+      var nowEpoch = Math.floor(Date.now() / 1000);
+      if (nowEpoch >= dayStart && nowEpoch <= dayEnd) {
+        var nowPct = ((nowEpoch - dayStart) / DAY_SECONDS) * 100;
+        nowMarker = '<div class="tl-now" style="left:' + nowPct.toFixed(2) + '%;"></div>';
+      }
+    }
+
+    host.innerHTML = '<div class="timeline" id="tlStrip">' + grid + blocks + nowMarker + '</div>' + axis;
+    wireTimelineTooltips();
+  }
+
+  function wireTimelineTooltips() {
+    var strip = $("tlStrip");
+    if (!strip) return;
+    var tip = $("tooltip");
+    var blocks = strip.querySelectorAll(".tl-block");
+    for (var i = 0; i < blocks.length; i++) {
+      var el = blocks[i];
+      el.addEventListener("mouseenter", showTip);
+      el.addEventListener("mousemove", moveTip);
+      el.addEventListener("mouseleave", hideTip);
+    }
+    function showTip(ev) {
+      var raw = ev.currentTarget.getAttribute("data-b");
+      if (!raw) return;
+      var b;
+      try { b = JSON.parse(decodeURIComponent(raw)); } catch (e) { return; }
+      var head = b.domain || b.app || b.label;
+      var sub = (b.domain && b.app) ? b.app : "";
+      var html = '<div class="tt-cat"><span class="sw" style="background:' + escapeHtml(b.color) + ';"></span>'
+        + escapeHtml(b.category) + '</div>';
+      html += '<div style="font-weight:620;margin-bottom:4px;">' + escapeHtml(head)
+        + (sub ? ' <span style="color:var(--text-dim);font-weight:400;">&middot; ' + escapeHtml(sub) + '</span>' : '') + '</div>';
+      if (b.title) html += '<div class="tt-title">' + escapeHtml(b.title) + '</div>';
+      html += '<div class="tt-time"><b>' + escapeHtml(fmtTimeRange(b.start, b.end)) + '</b> &nbsp;&middot;&nbsp; '
+        + escapeHtml(fmtDur(b.seconds)) + '</div>';
+      tip.innerHTML = html;
+      tip.classList.add("on");
+      moveTip(ev);
+    }
+    function moveTip(ev) {
+      var pad = 14;
+      var tw = tip.offsetWidth, th = tip.offsetHeight;
+      var x = ev.clientX + pad;
+      var y = ev.clientY + pad;
+      if (x + tw > window.innerWidth - 8) x = ev.clientX - tw - pad;
+      if (y + th > window.innerHeight - 8) y = ev.clientY - th - pad;
+      if (x < 6) x = 6;
+      if (y < 6) y = 6;
+      tip.style.left = x + "px";
+      tip.style.top = y + "px";
+    }
+    function hideTip() { tip.classList.remove("on"); }
+  }
+
+  // ---------- Donut ----------
+  function renderDonut(d) {
+    var host = $("donutHost");
+    var cats = (d && Array.isArray(d.by_category)) ? d.by_category.filter(function (c) { return c && c.seconds > 0; }) : [];
+    if (!cats.length) {
+      host.innerHTML = '<div class="empty"><div class="big">Nothing tracked yet</div>'
+        + '<div class="small">Category breakdown appears once activity is recorded.</div></div>';
+      return;
+    }
+    var total = 0;
+    cats.forEach(function (c) { total += Number(c.seconds) || 0; });
+    if (total <= 0) total = 1;
+
+    var size = 150, cx = size / 2, cy = size / 2, r = 58, stroke = 22;
+    var circ = 2 * Math.PI * r;
+    var offset = 0;
+    var arcs = "";
+    cats.forEach(function (c) {
+      var frac = (Number(c.seconds) || 0) / total;
+      var len = frac * circ;
+      var color = c.color || catColorFor(c.category);
+      // gap of 1.5px between arcs if more than one
+      var gap = cats.length > 1 ? 1.5 : 0;
+      var dash = Math.max(len - gap, 0.5);
+      arcs += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color
+        + '" stroke-width="' + stroke + '" stroke-dasharray="' + dash.toFixed(2) + ' ' + (circ - dash).toFixed(2) + '"'
+        + ' stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"></circle>';
+      offset += len;
+    });
+
+    var topCat = cats[0];
+    var topPct = Math.round((Number(topCat.seconds) || 0) / total * 100);
+
+    var svg = '<div class="donut-wrap"><svg class="donut-svg" width="' + size + '" height="' + size
+      + '" viewBox="0 0 ' + size + ' ' + size + '" aria-label="Category breakdown donut chart">'
+      + '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="#1d222e" stroke-width="' + stroke + '"></circle>'
+      + arcs
+      + '<text x="' + cx + '" y="' + (cy - 4) + '" text-anchor="middle" class="num" fill="#f2f3f7" '
+      + 'font-size="25" font-weight="700" letter-spacing="-0.5">' + fmtDur(total) + '</text>'
+      + '<text x="' + cx + '" y="' + (cy + 15) + '" text-anchor="middle" class="donut-center-lbl">total</text>'
+      + '</svg>';
+
+    var legend = '<div class="cat-legend">';
+    cats.forEach(function (c) {
+      var color = c.color || catColorFor(c.category);
+      var pct = Math.round((Number(c.seconds) || 0) / total * 100);
+      legend += '<div class="cat-row">'
+        + '<span class="sw" style="background:' + escapeHtml(color) + ';"></span>'
+        + '<span class="nm">' + escapeHtml(c.category || "Uncategorized") + '</span>'
+        + '<span class="tm num">' + fmtDur(c.seconds) + '</span>'
+        + '<span class="pct num">' + pct + '%</span></div>';
+    });
+    legend += "</div>";
+
+    host.innerHTML = svg + legend + "</div>";
+  }
+
+  // ---------- Bars ----------
+  function renderBars(hostId, metaId, items, key) {
+    var host = $(hostId);
+    var meta = $(metaId);
+    var list = Array.isArray(items) ? items.filter(function (x) { return x && (Number(x.seconds) || 0) > 0; }) : [];
+    if (!list.length) {
+      meta.textContent = "";
+      host.innerHTML = '<div class="empty"><div class="small">No ' + (key === "domain" ? "sites" : "apps") + ' tracked for this day</div></div>';
+      return;
+    }
+    var top = list.slice(0, 12);
+    var max = 0;
+    top.forEach(function (x) { if ((Number(x.seconds) || 0) > max) max = Number(x.seconds); });
+    if (max <= 0) max = 1;
+    meta.textContent = list.length + (key === "domain" ? " sites" : " apps");
+
+    var html = '<div class="barlist">';
+    top.forEach(function (x) {
+      var name = key === "domain" ? (x.domain || "unknown") : (x.app || "unknown");
+      var color = x.color || catColorFor(x.category);
+      var w = Math.max((Number(x.seconds) || 0) / max * 100, 2);
+      html += '<div class="barrow">'
+        + '<span class="dot" style="background:' + escapeHtml(color) + ';"></span>'
+        + '<div class="bcol"><div class="bname" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</div>'
+        + '<div class="btrack"><div class="bfill" style="width:' + w.toFixed(1) + '%;background:' + escapeHtml(color) + ';"></div></div></div>'
+        + '<span class="btime num">' + fmtDur(x.seconds) + '</span></div>';
+    });
+    html += "</div>";
+    host.innerHTML = html;
+  }
+
+  // ---------- Weekly trends ----------
+  function loadRange() {
+    getJSON("/api/range?days=7").then(function (r) {
+      var days = (r && Array.isArray(r.days)) ? r.days : [];
+      if (days.length > 7) days = days.slice(days.length - 7); // keep most recent 7, protect the grid
+      renderWeek(days);
+    }).catch(function () {
+      renderWeek([]);
+    });
+  }
+
+  function renderWeek(days) {
+    var host = $("weekHost");
+    var meta = $("weekMeta");
+    if (!days.length) {
+      meta.textContent = "";
+      host.innerHTML = '<div class="empty"><div class="small">No weekly data yet</div></div>';
+      return;
+    }
+    // max total for scaling
+    var maxTotal = 0;
+    days.forEach(function (d) { if ((Number(d.total_seconds) || 0) > maxTotal) maxTotal = Number(d.total_seconds); });
+    if (maxTotal <= 0) maxTotal = 1;
+
+    var weekFocus = 0, weekTotal = 0;
+    days.forEach(function (d) { weekFocus += Number(d.focus_seconds) || 0; weekTotal += Number(d.total_seconds) || 0; });
+    meta.textContent = fmtDur(weekTotal) + " total";
+
+    var html = '<div class="week">';
+    days.forEach(function (d) {
+      var total = Number(d.total_seconds) || 0;
+      var focus = Number(d.focus_seconds) || 0;
+      var heightPct = total / maxTotal * 100; // of the 150px box
+      var sel = d.date === state.selected;
+      var cats = Array.isArray(d.by_category) ? d.by_category.filter(function (c) { return c && c.seconds > 0; }) : [];
+      // segments: each cat's share of THIS day's total, applied to heightPct
+      var segs = "";
+      if (total > 0 && cats.length) {
+        cats.forEach(function (c) {
+          var segH = (Number(c.seconds) || 0) / total * heightPct;
+          var color = c.color || catColorFor(c.category);
+          segs += '<div class="seg" style="height:' + segH.toFixed(2) + '%;background:' + escapeHtml(color) + ';"></div>';
+        });
+      } else if (total > 0) {
+        segs = '<div class="seg" style="height:' + heightPct.toFixed(2) + '%;background:var(--accent-2);"></div>';
+      }
+      var focusPct = total > 0 ? Math.round(focus / total * 100) : 0;
+      html += '<div class="daycol' + (sel ? " sel" : "") + '" role="button" tabindex="0" data-date="' + escapeHtml(d.date)
+        + '" title="' + escapeHtml(fmtDateLabel(d.date)) + ' — ' + fmtDur(total) + '">'
+        + '<div class="barbox">' + segs + '</div>'
+        + '<div class="dlabel">' + weekdayInitial(d.date) + '</div>'
+        + '<div class="dtot num">' + (total > 0 ? fmtDur(total) : "—") + '</div>'
+        + '<div class="dfocus num"><b>' + focusPct + '%</b> focus</div>'
+        + '</div>';
+    });
+    html += "</div>";
+    host.innerHTML = html;
+
+    // wire clicks
+    var cols = host.querySelectorAll(".daycol");
+    for (var i = 0; i < cols.length; i++) {
+      (function (col) {
+        var dt = col.getAttribute("data-date");
+        col.addEventListener("click", function () { if (dt) selectDate(dt); });
+        col.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); if (dt) selectDate(dt); }
+        });
+      })(cols[i]);
+    }
+  }
+
+  // ---------- Nav wiring ----------
+  $("prevBtn").addEventListener("click", function () { selectDate(shiftDate(state.selected, -1)); });
+  $("nextBtn").addEventListener("click", function () {
+    if (isToday(state.selected)) return;
+    selectDate(shiftDate(state.selected, 1));
+  });
+  $("todayBtn").addEventListener("click", function () { if (!isToday(state.selected)) selectDate(state.today); });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.target && /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
+    if (ev.key === "ArrowLeft") { selectDate(shiftDate(state.selected, -1)); }
+    else if (ev.key === "ArrowRight" && !isToday(state.selected)) { selectDate(shiftDate(state.selected, 1)); }
+  });
+
+  // ---------- Go ----------
+  boot();
+})();
+</script>

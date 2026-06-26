@@ -27,7 +27,7 @@ launchctl load "$PLIST_DST"
 # Same for the dashboard agent (always-on viewer at http://localhost:7799).
 DASH_SRC="$HERE/com.sophie.timetracker-dashboard.plist"
 DASH_DST="$HOME/Library/LaunchAgents/com.sophie.timetracker-dashboard.plist"
-sed -e "s|__DASH_PATH__|$HERE/dashboard.py|g" \
+sed -e "s|__DASH_PATH__|$HERE/server.py|g" \
     -e "s|__DATA_DIR__|$HERE/data|g" \
     "$DASH_SRC" > "$DASH_DST"
 launchctl unload "$DASH_DST" 2>/dev/null || true
