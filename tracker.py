@@ -219,9 +219,19 @@ def run() -> None:
         if now - last_push >= PUSH_INTERVAL:
             last_push = now
             date_str = datetime.now().strftime("%Y-%m-%d")
-            if push_to_github(conn, date_str):
+            # Retry a few times: LaunchAgents occasionally can't resolve DNS for
+            # a moment (resolver not yet attached to the process session).
+            ok = False
+            for attempt in range(3):
+                if push_to_github(conn, date_str):
+                    ok = True
+                    break
+                time.sleep(3)
+            if ok:
                 db.set_meta(conn, "last_sync", str(now))
                 print(f"[time-tracker] synced {date_str} at {datetime.now():%H:%M}")
+            else:
+                print(f"[time-tracker] sync failed (will retry in {PUSH_INTERVAL}s)")
 
 
 if __name__ == "__main__":
