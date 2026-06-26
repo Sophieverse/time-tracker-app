@@ -210,10 +210,12 @@ def main():
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://localhost:{port}"
     print(f"[dashboard] serving {url}  (reading {DATA_DIR})")
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+    # Skip auto-opening a browser tab when run as a daemon (TT_NO_OPEN=1).
+    if not os.environ.get("TT_NO_OPEN"):
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

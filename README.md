@@ -64,12 +64,18 @@ A small dark-themed dashboard at **http://localhost:7799** shows time-per-domain
 with a day picker and live bars. It reads `data/*.json` straight off disk, so it
 mirrors the tracker within seconds (faster than the 10-min GitHub push).
 
+`install.sh` registers it as its own always-on LaunchAgent, so
+**http://localhost:7799** is available at all times after install — just open it
+in any browser. It refreshes every 15s.
+
+To run it manually instead (e.g. on a different port):
+
 ```bash
-python3 dashboard.py        # serve on :7799 and open the browser
+python3 dashboard.py        # serve on :7799
 python3 dashboard.py 8080   # custom port
 ```
 
-Or double-click **dashboard.command** in Finder. It refreshes every 15s.
+Or double-click **dashboard.command** in Finder.
 
 ## Commands
 

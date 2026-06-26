@@ -15,7 +15,7 @@ fi
 
 mkdir -p "$HERE/data"
 
-# Substitute absolute paths into the plist template.
+# Substitute absolute paths into the tracker plist template.
 sed -e "s|__TRACKER_PATH__|$HERE/tracker.py|g" \
     -e "s|__DATA_DIR__|$HERE/data|g" \
     "$PLIST_SRC" > "$PLIST_DST"
@@ -24,7 +24,16 @@ sed -e "s|__TRACKER_PATH__|$HERE/tracker.py|g" \
 launchctl unload "$PLIST_DST" 2>/dev/null || true
 launchctl load "$PLIST_DST"
 
-echo "✅ Time Tracker installed and running."
+# Same for the dashboard agent (always-on viewer at http://localhost:7799).
+DASH_SRC="$HERE/com.sophie.timetracker-dashboard.plist"
+DASH_DST="$HOME/Library/LaunchAgents/com.sophie.timetracker-dashboard.plist"
+sed -e "s|__DASH_PATH__|$HERE/dashboard.py|g" \
+    -e "s|__DATA_DIR__|$HERE/data|g" \
+    "$DASH_SRC" > "$DASH_DST"
+launchctl unload "$DASH_DST" 2>/dev/null || true
+launchctl load "$DASH_DST"
+
+echo "✅ Time Tracker installed and running (tracker + dashboard at http://localhost:7799)."
 echo ""
 echo "Next: switch to each browser once so macOS shows the"
 echo "      'wants access to control <Browser>' prompt — click OK."
