@@ -119,19 +119,36 @@ def _brief(conn, s) -> str:
     return "\n".join(lines)
 
 
+def _heuristic_fallback(conn, sess_list, report) -> None:
+    """Label sessions from their page titles without an LLM. Keeps the tracker
+    from getting stuck on "labeling" when the Claude API is unavailable."""
+    import heuristic_labels as hl
+    for s in sess_list:
+        try:
+            title, summary, tasks = hl.heuristic_label(conn, s)
+            db.label_session(conn, s["start_ts"], title, summary, json.dumps(tasks))
+            report["labeled"] += 1
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def label(conn) -> dict:
     todo = [s for s in db.unlabeled_sessions(conn) if s["seconds"] >= LABEL_MIN]
     report = {"labeled": 0, "error": None}
     if not todo:
         return report
     api_key = _resolve_api_key()
+    # Without a working API key or SDK, fall back to heuristic labels so the
+    # dashboard always shows *something* instead of a permanent "labeling…".
     if not api_key:
-        report["error"] = "no API key"
+        report["error"] = "no API key — used heuristic labels"
+        _heuristic_fallback(conn, todo, report)
         return report
     try:
         import anthropic
     except Exception:
-        report["error"] = "anthropic SDK missing"
+        report["error"] = "anthropic SDK missing — used heuristic labels"
+        _heuristic_fallback(conn, todo, report)
         return report
 
     client = anthropic.Anthropic(api_key=api_key)
@@ -150,6 +167,7 @@ def label(conn) -> dict:
                                "format": {"type": "json_schema", "schema": _SCHEMA}},
             )
             text = next(b.text for b in resp.content if b.type == "text")
+            labeled_ids = set()
             for lab in json.loads(text)["labels"]:
                 s = by_id.get(lab["id"])
                 if not s:
@@ -157,8 +175,11 @@ def label(conn) -> dict:
                 db.label_session(conn, s["start_ts"], lab["title"], lab["summary"],
                                  json.dumps(lab.get("tasks") or []))
                 report["labeled"] += 1
+                labeled_ids.add(lab["id"])
         except Exception as e:  # noqa: BLE001
+            # API failed for this batch (auth/credit/network) → heuristic fallback
             report["error"] = str(e)[:200]
+            _heuristic_fallback(conn, batch, report)
     return report
 
 
